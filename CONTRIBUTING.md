@@ -55,7 +55,9 @@ pre-commit run --all-files
 
 ## Коммиты и pull request
 
-- Conventional Commits на русском: `feat(auth): …`, `fix(audit): …`.
+- Conventional Commits на английском: `feat(auth): add password reset`,
+  `fix(audit): hide encrypted values`. Описание PR — на русском.
+- Заметки к релизу и раздел `CHANGELOG.md` — на русском; релиз выпускает автор.
 - Один логический набор изменений на ветку; тесты сервисного слоя и хотя бы
   один интеграционный тест роутов для новой функциональности.
 - Для нового модуля обязателен тест изоляции организаций.
