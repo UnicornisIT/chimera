@@ -48,7 +48,7 @@ desktop = [
 ]
 dev = [
     "Faker>=37.0",
-    "mypy>=1.14,<2.0",
+    "mypy>=1.14,<3.0",
     "pip-audit>=2.7,<3.0",
     "pre-commit>=4.0,<5.0",
     "pytest>=8.3,<9.0",
