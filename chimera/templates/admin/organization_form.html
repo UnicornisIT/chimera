@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import csrf_field with context %}
+{% block title %}{{ 'Новая организация' if creating else organization.short_name }}{% endblock %}
+{% set o = organization %}
+{% macro val(field) -%}{{ form.get(field) if form.get(field) is not none else (o[field] if o and o[field] is not none else '') }}{%- endmacro %}
+{% block content %}
+<div class="page-header">
+    <div><h1>{{ 'Новая организация' if creating else 'Реквизиты организации' }}</h1></div>
+    <div class="page-actions"><a class="btn btn-secondary" href="{{ url_for('admin.organizations') }}">К списку</a></div>
+</div>
+<form method="post" class="panel">
+    {{ csrf_field() }}
+    <div class="form-grid">
+        <div class="form-field is-wide">
+            <label for="name">Полное название</label>
+            <input id="name" name="name" value="{{ val('name') }}" required maxlength="500">
+        </div>
+        <div class="form-field">
+            <label for="short_name">Краткое название</label>
+            <input id="short_name" name="short_name" value="{{ val('short_name') }}" maxlength="150">
+        </div>
+        <div class="form-field">
+            <label for="org_type">Тип</label>
+            {% set current_type = form.get('org_type') or (o.org_type.value if o else 'college') %}
+            <select id="org_type" name="org_type" required>
+                {% for key, label in org_types.items() %}
+                <option value="{{ key.value }}"{% if current_type == key.value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <span class="hint">Определяет терминологию: факультет/отделение, кафедра/цикловая комиссия и т. п.</span>
+        </div>
+        <div class="form-field">
+            <label for="student_term">Как называть обучающихся</label>
+            {% set current_term = form.get('student_term') or (o.student_term.value if o and o.student_term else '') %}
+            <select id="student_term" name="student_term">
+                <option value="">По умолчанию для типа</option>
+                {% for key, label in student_terms.items() %}
+                <option value="{{ key.value }}"{% if current_term == key.value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-field is-wide">
+            <label for="founder_name">Полное название учредителя / вуза</label>
+            <input id="founder_name" name="founder_name" value="{{ val('founder_name') }}" maxlength="500">
+            <span class="hint">Для колледжа — учредитель, для филиала или института — головной вуз.</span>
+        </div>
+        <div class="form-field is-wide">
+            <label for="address">Адрес</label>
+            <textarea id="address" name="address">{{ val('address') }}</textarea>
+        </div>
+        <div class="form-field">
+            <label for="head_full_name">ФИО руководителя</label>
+            <input id="head_full_name" name="head_full_name" value="{{ val('head_full_name') }}" maxlength="300">
+        </div>
+        <div class="form-field">
+            <label for="head_position">Должность руководителя</label>
+            <input id="head_position" name="head_position" value="{{ val('head_position') }}" maxlength="300" placeholder="Директор, ректор…">
+        </div>
+        <div class="form-field is-wide">
+            <label for="document_logo_path">Логотип для документов</label>
+            <input id="document_logo_path" name="document_logo_path" value="{{ val('document_logo_path') }}" maxlength="500" disabled>
+            <span class="hint"><span class="badge badge-warning">Скоро</span> Загрузка логотипа появится вместе с модулем документов.</span>
+        </div>
+        <div class="form-field">
+            <label class="form-check"><input type="checkbox" name="is_active" value="1"{% if creating or o.is_active %} checked{% endif %}> Организация активна</label>
+        </div>
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="btn">{{ 'Создать' if creating else 'Сохранить' }}</button>
+    </div>
+</form>
+{% endblock %}

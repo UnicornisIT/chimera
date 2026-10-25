@@ -1,0 +1,13 @@
+[Unit]
+Description=Chimera: ежедневная резервная копия PostgreSQL
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=chimera
+Group=chimera
+EnvironmentFile=/srv/chimera/.env
+UMask=0077
+# PG_DUMP_URL — строка подключения libpq (postgresql://user@host/db), пароль в ~/.pgpass.
+ExecStart=/bin/sh -c 'pg_dump --format=custom --no-owner --file="/var/lib/chimera/backups/chimera-$(date -u +%%Y%%m%%d-%%H%%M%%S).dump" "$PG_DUMP_URL"'
+ExecStartPost=/usr/bin/find /var/lib/chimera/backups -name 'chimera-*.dump' -mtime +30 -delete

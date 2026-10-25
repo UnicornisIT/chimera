@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+{% from "_ui_macros.html" import feature_badge, csrf_field, nav_icon with context %}
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/chimera-mark.svg') }}">
+    <title>{% block title %}{% endblock %} · {{ app_metadata.name }}</title>
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/legacy.css') }}">
+    {% block head %}{% endblock %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/modern.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chimera.css') }}">
+</head>
+{% set endpoint = request.endpoint or '' %}
+{% set authenticated = current_user is not none and ctx is not none and ctx.organization_id is not none %}
+<body class="{% if authenticated %}app-authenticated data-page {% else %}auth-page login-page-body {% endif %}{% if acting %}is-acting {% endif %}{% block body_class %}{% endblock %}">
+    {% if authenticated and acting %}
+    <div class="role-banner" role="status">
+        <span>Вы работаете как: {{ acting.label }}</span>
+        <form method="post" action="{{ url_for('main.stop_acting') }}">
+            {{ csrf_field() }}
+            <button type="submit">Вернуться</button>
+        </form>
+    </div>
+    {% endif %}
+    <div class="container">
+        {% if authenticated %}
+        <ul class="main-nav">
+            <li>
+                <a href="{{ url_for('main.dashboard') }}" class="nav-brand nav-brand-text{% if endpoint == 'main.dashboard' %} active{% endif %}" aria-label="{{ app_metadata.name }}, главная страница">
+                    <span class="nav-brand-mark" aria-hidden="true">C</span><span>{{ app_metadata.name }}</span>
+                </a>
+            </li>
+            <li><a href="{{ url_for('main.dashboard') }}" class="sidebar-link{% if endpoint == 'main.dashboard' %} active{% endif %}">{{ nav_icon('home') }}<span>Главная</span></a></li>
+            <li><span class="nav-soon" title="{{ get_feature('groups').description }}"><span>Группы и {{ t.student.nom_pl|lower }}</span>{{ feature_badge('groups') }}</span></li>
+            <li><span class="nav-soon" title="{{ get_feature('documents').description }}"><span>Документы</span>{{ feature_badge('documents') }}</span></li>
+            <li><span class="nav-soon" title="{{ get_feature('assignments').description }}"><span>Поручения</span>{{ feature_badge('assignments') }}</span></li>
+            <li><span class="nav-soon" title="{{ get_feature('references').description }}"><span>Справочники</span>{{ feature_badge('references') }}</span></li>
+            {% if ctx.can(P.USERS_MANAGE) %}
+            <li>
+                <details class="nav-dropdown"{% if endpoint.startswith('admin.') %} open{% endif %}>
+                    <summary class="nav-dropdown-summary{% if endpoint.startswith('admin.') %} active{% endif %}">
+                        Администрирование
+                        <svg class="nav-dropdown-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+                    </summary>
+                    <div class="nav-dropdown-panel">
+                        <a href="{{ url_for('admin.index') }}" {% if endpoint == 'admin.index' %}class="active"{% endif %}>Обзор</a>
+                        <a href="{{ url_for('admin.organizations') }}" {% if endpoint.startswith('admin.organization') %}class="active"{% endif %}>Организации</a>
+                        <a href="{{ url_for('admin.divisions') }}" {% if endpoint.startswith('admin.division') %}class="active"{% endif %}>{{ t.division.nom_pl }} и {{ t.department.nom_pl|lower }}</a>
+                        <a href="{{ url_for('admin.users') }}" {% if endpoint.startswith('admin.user') %}class="active"{% endif %}>Пользователи</a>
+                        <a href="{{ url_for('admin.requests') }}" {% if endpoint.startswith('admin.request') %}class="active"{% endif %}>Заявки</a>
+                        <a href="{{ url_for('admin.audit') }}" {% if endpoint == 'admin.audit' %}class="active"{% endif %}>Журнал аудита</a>
+                        {% if ctx.can_system(SP.BACKUPS_MANAGE) %}
+                        <a href="{{ url_for('admin.backups') }}" {% if endpoint.startswith('admin.backup') %}class="active"{% endif %}>Резервные копии</a>
+                        {% endif %}
+                        <a href="{{ url_for('admin.act_as') }}" {% if endpoint == 'admin.act_as' %}class="active"{% endif %}>Работать как…</a>
+                    </div>
+                </details>
+            </li>
+            {% endif %}
+            <li class="main-nav-spacer" aria-hidden="true"></li>
+            <li class="sidebar-meta"><span>{{ app_metadata.name }} {{ app_version }}</span></li>
+        </ul>
+        <header class="app-topbar">
+            <button type="button" class="topbar-icon sidebar-toggle" aria-label="Свернуть боковую панель" title="Свернуть боковую панель" aria-expanded="true" data-sidebar-toggle>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            </button>
+            <div class="topbar-title">{% block page_title %}{{ self.title() }}{% endblock %}</div>
+            <div class="topbar-search-slot">
+                {% if user_organizations|length > 1 %}
+                <form method="post" action="{{ url_for('main.switch_organization') }}" class="org-switcher">
+                    {{ csrf_field() }}
+                    <label for="org-switcher" class="sr-only">Организация</label>
+                    <select id="org-switcher" name="organization_id" data-autosubmit>
+                        {% for org in user_organizations %}
+                        <option value="{{ org.id }}"{% if current_org and org.id == current_org.id %} selected{% endif %}>{{ org.short_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <noscript><button type="submit" class="btn btn-secondary">Перейти</button></noscript>
+                </form>
+                {% elif current_org %}
+                <span class="org-name" title="{{ current_org.name }}">{{ current_org.short_name }}</span>
+                {% endif %}
+            </div>
+            <div class="topbar-actions">
+                <button type="button" class="topbar-icon theme-toggle" aria-label="Изменить тему" title="Тема: системная" data-theme-toggle>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="4"/></svg>
+                </button>
+                <details class="user-menu">
+                    <summary class="topbar-user" aria-label="Меню пользователя">
+                        <span class="user-avatar" aria-hidden="true">{{ current_user.full_name[:1]|upper }}</span>
+                        <span>{{ current_user.full_name }} · {{ role_labels[ctx.role] if ctx.role else '' }}</span>
+                    </summary>
+                    <nav class="user-menu-links" aria-label="Меню пользователя">
+                        <a href="{{ url_for('auth.profile') }}">Профиль</a>
+                        <a href="{{ url_for('auth.change_password') }}">Сменить пароль</a>
+                        <form method="post" action="{{ url_for('auth.logout') }}">
+                            {{ csrf_field() }}
+                            <button type="submit" class="link-button">Выйти</button>
+                        </form>
+                    </nav>
+                </details>
+            </div>
+        </header>
+        {% endif %}
+        <main class="app-content" id="main-content">
+            {% block flashes %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                <div class="flash-messages">
+                  {% for category, message in messages %}
+                    <div class="flash-message {{ category }}">{{ message }}</div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            {% endwith %}
+            {% endblock %}
+            {% block content %}{% endblock %}
+            {% if authenticated %}
+            <footer class="app-footer">
+                © {{ app_metadata.name }} {{ app_version }} · Разработчик: <a href="{{ app_metadata.github_url }}" rel="noopener">{{ app_metadata.developer_name }}</a>
+            </footer>
+            {% endif %}
+        </main>
+    </div>
+    <script src="{{ url_for('static', filename='js/chimera-ui.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/user-menu.js') }}" defer></script>
+</body>
+</html>

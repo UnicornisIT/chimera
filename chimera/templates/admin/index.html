@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Администрирование{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div><h1>Администрирование</h1><p>{{ current_org.name }}</p></div>
+</div>
+<div class="card-grid">
+    <a class="module-card" href="{{ url_for('admin.organizations') }}">
+        <h2>Организации и реквизиты</h2>
+        <p>Название, тип, учредитель, руководитель — подставляются в документы.{% if can_create_orgs %} Создание новых организаций.{% endif %}</p>
+    </a>
+    <a class="module-card" href="{{ url_for('admin.divisions') }}">
+        <h2>{{ t.division.nom_pl }} и {{ t.department.nom_pl|lower }}</h2>
+        <p>Структура: организация → {{ t.division.lower }} → {{ t.department.lower }}.</p>
+    </a>
+    <a class="module-card" href="{{ url_for('admin.users') }}">
+        <h2>Пользователи и роли</h2>
+        <p>Учётные записи, роли в организации, временные пароли.</p>
+    </a>
+    <a class="module-card" href="{{ url_for('admin.requests') }}">
+        <h2>Заявки на доступ</h2>
+        <p>Саморегистрации, ожидающие одобрения.</p>
+        {% if pending_requests %}<span class="badge badge-warning">Ожидают: {{ pending_requests }}</span>{% endif %}
+    </a>
+    <a class="module-card" href="{{ url_for('admin.audit') }}">
+        <h2>Журнал аудита</h2>
+        <p>Кто, когда, в какой роли и что изменил.</p>
+    </a>
+    {% if can_backups %}
+    <a class="module-card" href="{{ url_for('admin.backups') }}">
+        <h2>Резервные копии</h2>
+        <p>Копия базы и состояние схемы.</p>
+    </a>
+    {% endif %}
+    <a class="module-card" href="{{ url_for('admin.act_as') }}">
+        <h2>Работать как…</h2>
+        <p>Проверить интерфейс глазами руководителя, куратора или старосты.</p>
+    </a>
+</div>
+{% endblock %}

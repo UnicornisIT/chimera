@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import csrf_field, role_options, division_options with context %}
+{% block title %}Заявки на доступ{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div><h1>Заявки на доступ</h1><p>Саморегистрации в организации «{{ current_org.short_name }}».</p></div>
+</div>
+<div class="table-wrap">
+    <table class="data-table">
+        <thead><tr><th>Подана</th><th>ФИО</th><th>Логин / почта</th><th>Комментарий</th><th>Решение</th></tr></thead>
+        <tbody>
+        {% for r in requests %}
+        <tr>
+            <td>{{ r.created_at|datetime }}</td>
+            <td>{{ r.user.full_name }}</td>
+            <td>{{ r.user.username }}{% if r.user.email %}<br><span class="muted small">{{ r.user.email }}</span>{% endif %}</td>
+            <td>{{ r.comment or '—' }}</td>
+            <td>
+                <form method="post" action="{{ url_for('admin.request_approve', request_id=r.id) }}" class="inline-form">
+                    {{ csrf_field() }}
+                    <label class="sr-only" for="role-{{ r.id }}">Роль</label>
+                    <select id="role-{{ r.id }}" name="role" data-role-select>{{ role_options(roles, 'curator') }}</select>
+                    <span data-for-roles="head curator">
+                        <label class="sr-only" for="division-{{ r.id }}">{{ t.division }}</label>
+                        <select id="division-{{ r.id }}" name="division_id">{{ division_options(divisions, None, '— ' ~ t.division.lower ~ ' —') }}</select>
+                    </span>
+                    <button type="submit" class="btn">Одобрить</button>
+                </form>
+                <form method="post" action="{{ url_for('admin.request_reject', request_id=r.id) }}" class="inline-form" data-confirm="Отклонить заявку {{ r.user.full_name }}?">
+                    {{ csrf_field() }}
+                    <button type="submit" class="btn btn-secondary">Отклонить</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">Новых заявок нет.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

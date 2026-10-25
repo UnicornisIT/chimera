@@ -1,0 +1,51 @@
+{% macro disclosure_chevron() -%}
+<span class="disclosure-chevron" aria-hidden="true">
+    <svg viewBox="0 0 24 24" focusable="false">
+        <path d="m7 10 5 5 5-5"></path>
+    </svg>
+</span>
+{%- endmacro %}
+
+{% macro badge(text, tone='neutral') -%}
+<span class="badge badge-{{ tone }}">{{ text }}</span>
+{%- endmacro %}
+
+{# Бейдж статуса фича-флага: «Бета» или «Скоро»; для готовых модулей ничего не выводит. #}
+{% macro feature_badge(key) -%}
+{%- set feature = get_feature(key) -%}
+{%- if feature.badge -%}
+<span class="badge badge-{{ feature.badge_tone }}" title="В разработке">{{ feature.badge }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro empty_state(title, description='', action_url='', action_label='') -%}
+<section class="empty-state" role="status">
+    <span class="empty-state-icon" aria-hidden="true">—</span>
+    <h2>{{ title }}</h2>
+    {% if description %}<p>{{ description }}</p>{% endif %}
+    {% if action_url and action_label %}<a class="btn" href="{{ action_url }}">{{ action_label }}</a>{% endif %}
+</section>
+{%- endmacro %}
+
+{% macro csrf_field() -%}
+<input type="hidden" name="{{ csrf_field_name }}" value="{{ csrf_token() }}">
+{%- endmacro %}
+
+{% macro nav_icon(name) -%}
+{%- if name == 'home' -%}
+<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 10 8-6 8 6v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1Z"></path></svg>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro role_options(roles, selected=None) -%}
+{% for role in roles %}
+<option value="{{ role.value }}"{% if selected == role or selected == role.value %} selected{% endif %}>{{ role_labels[role] }}</option>
+{% endfor %}
+{%- endmacro %}
+
+{% macro division_options(divisions, selected=None, empty_label='— не выбрано —') -%}
+<option value="">{{ empty_label }}</option>
+{% for division in divisions %}
+<option value="{{ division.id }}"{% if selected == division.id %} selected{% endif %}>{% if division.parent_id %}— {% endif %}{{ division.name }}</option>
+{% endfor %}
+{%- endmacro %}

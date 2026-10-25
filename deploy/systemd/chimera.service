@@ -1,0 +1,26 @@
+[Unit]
+Description=Chimera (gunicorn)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=chimera
+Group=chimera
+WorkingDirectory=/srv/chimera
+EnvironmentFile=/srv/chimera/.env
+Environment="PATH=/srv/chimera/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="GUNICORN_BIND=127.0.0.1:8000"
+ExecStartPre=/srv/chimera/.venv/bin/python -m chimera migrate
+ExecStart=/srv/chimera/.venv/bin/gunicorn --config deploy/gunicorn.conf.py chimera.wsgi:app
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/chimera
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

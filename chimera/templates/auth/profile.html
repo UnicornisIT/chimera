@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Профиль{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div><h1>{{ user.full_name }}</h1><p>Логин: {{ user.username }}{% if user.email %} · {{ user.email }}{% endif %}</p></div>
+    <div class="page-actions"><a class="btn" href="{{ url_for('auth.change_password') }}">Сменить пароль</a></div>
+</div>
+<section class="panel">
+    <h2>Организации и роли</h2>
+    {% if user.is_superadmin %}<p><span class="badge badge-info">Системный администратор</span> — доступ администратора во всех организациях.</p>{% endif %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead><tr><th>Организация</th><th>Роль</th><th>Подразделение</th></tr></thead>
+            <tbody>
+            {% for m in memberships %}
+            <tr><td>{{ m.organization.short_name }}</td><td>{{ role_labels[m.role] }}</td><td>{{ m.division.name if m.division else '—' }}</td></tr>
+            {% else %}
+            <tr><td colspan="3" class="muted">Нет членств.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="muted small">Последний вход: {{ (user.last_login_at|datetime) or '—' }}</p>
+</section>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import csrf_field with context %}
+{% block title %}Регистрация{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/login.css') }}">{% endblock %}
+{% block content %}
+<div class="login-page">
+    <form method="post" class="login-card">
+        <div class="login-wordmark"><span class="nav-brand-mark" aria-hidden="true">C</span>{{ app_metadata.name }}</div>
+        <p class="login-subtitle">Заявка на доступ. Роль назначит администратор организации.</p>
+        {{ csrf_field() }}
+        <div class="login-field">
+            <label for="organization_id">Организация</label>
+            <select id="organization_id" name="organization_id" required>
+                <option value="">— выберите —</option>
+                {% for org in organizations %}
+                <option value="{{ org.id }}"{% if form.get('organization_id') == org.id|string %} selected{% endif %}>{{ org.short_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="login-field">
+            <label for="full_name">ФИО</label>
+            <input id="full_name" name="full_name" value="{{ form.get('full_name', '') }}" required autocomplete="name">
+        </div>
+        <div class="login-field">
+            <label for="username">Логин (латиница, цифры, точка, дефис)</label>
+            <input id="username" name="username" value="{{ form.get('username', '') }}" required autocomplete="username">
+        </div>
+        <div class="login-field">
+            <label for="email">Электронная почта</label>
+            <input id="email" name="email" type="email" value="{{ form.get('email', '') }}" autocomplete="email">
+        </div>
+        <div class="login-field">
+            <label for="password">Пароль (не короче {{ password_min_length }} символов)</label>
+            <input id="password" name="password" type="password" required minlength="{{ password_min_length }}" autocomplete="new-password">
+        </div>
+        <div class="login-field">
+            <label for="password_confirm">Повторите пароль</label>
+            <input id="password_confirm" name="password_confirm" type="password" required autocomplete="new-password">
+        </div>
+        <div class="login-field">
+            <label for="comment">Комментарий для администратора</label>
+            <input id="comment" name="comment" value="{{ form.get('comment', '') }}" placeholder="Например: куратор группы, кафедра">
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% for category, message in messages %}
+            <div class="login-message {{ category }}" role="alert">{{ message }}</div>
+          {% endfor %}
+        {% endwith %}
+        <div class="login-actions">
+            <button type="submit" class="btn">Отправить заявку</button>
+            <a href="{{ url_for('auth.login') }}" class="btn login-btn-secondary">Ко входу</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+{% block flashes %}{% endblock %}

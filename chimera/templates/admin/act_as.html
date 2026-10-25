@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import csrf_field, role_options, feature_badge with context %}
+{% block title %}Работать как…{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Работать как…</h1>
+        <p>Интерфейс и права переключатся на выбранную роль. Пока режим включён, сверху видна плашка, а каждое действие пишется в журнал с пометкой вашей реальной роли.</p>
+    </div>
+</div>
+<form method="post" class="panel">
+    {{ csrf_field() }}
+    <div class="form-grid">
+        <div class="form-field">
+            <label for="role">Роль</label>
+            <select id="role" name="role" data-role-select>{{ role_options(roles, 'curator') }}</select>
+        </div>
+        <div class="form-field" data-for-roles="head">
+            <label for="division_id">{{ t.division }}</label>
+            <select id="division_id" name="division_id">
+                <option value="">— выберите —</option>
+                {% for d in choices.divisions %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+            </select>
+            {% if not choices.divisions %}<span class="hint">Сначала добавьте {{ t.division.nom_pl|lower }} в разделе структуры.</span>{% endif %}
+        </div>
+        <div class="form-field" data-for-roles="curator">
+            <label for="curator_id">Чьи группы</label>
+            <select id="curator_id" name="subject_user_id">
+                <option value="">— куратор —</option>
+                {% for m in choices.curators %}<option value="{{ m.user_id }}">{{ m.user.full_name }}</option>{% endfor %}
+            </select>
+            {% if not choices.curators %}<span class="hint">В организации пока нет кураторов.</span>{% endif %}
+        </div>
+        <div class="form-field" data-for-roles="starosta">
+            <label for="starosta_id">Староста</label>
+            <select id="starosta_id" name="subject_user_id">
+                <option value="">— староста —</option>
+                {% for m in choices.starostas %}<option value="{{ m.user_id }}">{{ m.user.full_name }}</option>{% endfor %}
+            </select>
+            <span class="hint">Выбор группы {{ feature_badge('act_as_starosta_group') }} появится вместе с модулем групп.</span>
+        </div>
+    </div>
+    <ul class="muted small">
+        {% for role in roles %}<li><strong>{{ role_labels[role] }}</strong> — {{ role_descriptions[role] }}</li>{% endfor %}
+    </ul>
+    <div class="form-actions"><button type="submit" class="btn">Включить режим</button></div>
+</form>
+{% endblock %}
