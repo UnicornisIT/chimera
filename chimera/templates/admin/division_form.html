@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import csrf_field with context %}
+{% block title %}{{ division.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div><h1>{{ division.name }}</h1></div>
+    <div class="page-actions"><a class="btn btn-secondary" href="{{ url_for('admin.divisions') }}">К структуре</a></div>
+</div>
+<form method="post" class="panel">
+    {{ csrf_field() }}
+    <div class="form-grid">
+        <div class="form-field">
+            <label for="kind">Вид</label>
+            <select id="kind" name="kind">
+                <option value="{{ kinds.DIVISION.value }}"{% if division.kind == kinds.DIVISION %} selected{% endif %}>{{ t.division }}</option>
+                <option value="{{ kinds.DEPARTMENT.value }}"{% if division.kind == kinds.DEPARTMENT %} selected{% endif %}>{{ t.department }}</option>
+            </select>
+        </div>
+        <div class="form-field">
+            <label for="parent_id">Входит в</label>
+            <select id="parent_id" name="parent_id">
+                <option value="">— напрямую в {{ t.organization.lower }} —</option>
+                {% for p in parents %}<option value="{{ p.id }}"{% if division.parent_id == p.id %} selected{% endif %}>{{ p.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-field">
+            <label for="name">Название</label>
+            <input id="name" name="name" value="{{ division.name }}" required maxlength="300">
+        </div>
+        <div class="form-field">
+            <label for="short_name">Сокращение</label>
+            <input id="short_name" name="short_name" value="{{ division.short_name or '' }}" maxlength="100">
+        </div>
+        <div class="form-field">
+            <label class="form-check"><input type="checkbox" name="is_active" value="1"{% if division.is_active %} checked{% endif %}> Используется</label>
+        </div>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn">Сохранить</button></div>
+</form>
+{% endblock %}

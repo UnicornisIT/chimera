@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Журнал аудита{% endblock %}
+{% macro page_url(number) -%}
+{%- set params = dict(args) -%}{%- set _ = params.update({'page': number}) -%}{{ url_for('admin.audit', **params) }}
+{%- endmacro %}
+{% block content %}
+<div class="page-header">
+    <div><h1>Журнал аудита</h1><p>Записей: {{ page.total }}. Показаны действия только в организации «{{ current_org.short_name }}».</p></div>
+    <div class="page-actions"><button type="button" class="btn btn-secondary" data-print>Печать</button></div>
+</div>
+<form method="get" class="filter-bar">
+    <div class="form-field"><label for="q">Поиск</label><input id="q" name="q" value="{{ args.get('q', '') }}" placeholder="Логин, действие, объект"></div>
+    <div class="form-field">
+        <label for="action">Действие</label>
+        <select id="action" name="action">
+            <option value="">Все</option>
+            {% for a in actions %}<option value="{{ a }}"{% if filters.action == a %} selected{% endif %}>{{ a }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="form-field">
+        <label for="user_id">Пользователь</label>
+        <select id="user_id" name="user_id">
+            <option value="">Все</option>
+            {% for m in members %}<option value="{{ m.user_id }}"{% if filters.user_id == m.user_id %} selected{% endif %}>{{ m.user.full_name }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="form-field"><label for="from">С</label><input id="from" name="from" type="date" value="{{ args.get('from', '') }}"></div>
+    <div class="form-field"><label for="to">По</label><input id="to" name="to" type="date" value="{{ args.get('to', '') }}"></div>
+    <label class="form-check"><input type="checkbox" name="acting" value="1"{% if filters.acting_only %} checked{% endif %}> Только в режиме «работать как»</label>
+    <div><button type="submit" class="btn btn-secondary">Применить</button></div>
+</form>
+<div class="table-wrap">
+    <table class="data-table">
+        <thead><tr><th>Время</th><th>Пользователь</th><th>Роль</th><th>Действие</th><th>Объект</th><th>Изменения</th><th>IP</th></tr></thead>
+        <tbody>
+        {% for e in page.items %}
+        <tr>
+            <td>{{ e.created_at|datetime('%d.%m.%Y %H:%M:%S') }}</td>
+            <td>{{ e.username or '—' }}</td>
+            <td>
+                {% if e.is_acting %}
+                <span class="badge badge-warning">как {{ role_labels.get(e.acting_role, e.acting_role) if e.acting_role in role_labels else e.acting_role }}</span>
+                <br><span class="small muted">реально: {{ e.real_role }}</span>
+                {% else %}{{ e.real_role or '—' }}{% endif %}
+            </td>
+            <td><code>{{ e.action }}</code>{% if e.message %}<br><span class="small">{{ e.message }}</span>{% endif %}</td>
+            <td>{{ e.entity_type or '' }} {{ e.entity_id or '' }}</td>
+            <td>
+                {% if e.changes %}
+                <ul class="changes">
+                {% for key, value in e.changes.items() %}
+                    <li><code>{{ key }}</code>:
+                    {% if value is mapping and value.get('changed') and 'old' not in value %}изменено (значение скрыто)
+                    {% elif value is mapping and 'old' in value %}{{ value.old if value.old is not none else '∅' }} → {{ value.new if value.new is not none else '∅' }}
+                    {% else %}{{ value }}{% endif %}</li>
+                {% endfor %}
+                </ul>
+                {% endif %}
+            </td>
+            <td class="small">{{ e.ip or '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="muted">Записей нет.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if page.pages > 1 %}
+<nav class="pagination" aria-label="Страницы журнала">
+    {% if page.page > 1 %}<a class="btn btn-secondary" href="{{ page_url(page.page - 1) }}">Назад</a>{% endif %}
+    <span>Страница {{ page.page }} из {{ page.pages }}</span>
+    {% if page.page < page.pages %}<a class="btn btn-secondary" href="{{ page_url(page.page + 1) }}">Вперёд</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

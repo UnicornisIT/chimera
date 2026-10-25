@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import feature_badge with context %}
+{% block title %}Главная{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Здравствуйте, {{ current_user.full_name }}</h1>
+        <p>{{ current_org.short_name }} · {{ role_labels[ctx.role] }}</p>
+    </div>
+</div>
+<div class="card-grid">
+    {% for card in cards %}
+    {% if card.endpoint and card.feature.available %}
+    <a class="module-card" href="{{ url_for(card.endpoint) }}">
+        <h2>{{ card.title }}</h2>
+        <p>{{ card.description }}</p>
+        {{ feature_badge(card.feature.key) }}
+    </a>
+    {% else %}
+    <div class="module-card is-planned" aria-disabled="true">
+        <h2>{{ card.title }}</h2>
+        <p>{{ card.description }}</p>
+        {{ feature_badge(card.feature.key) }}
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endblock %}

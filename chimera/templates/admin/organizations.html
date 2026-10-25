@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Организации{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div><h1>Организации</h1><p>Реквизиты используются в шапках и подписях документов.</p></div>
+    {% if can_create %}<div class="page-actions"><a class="btn" href="{{ url_for('admin.organization_new') }}">Добавить организацию</a></div>{% endif %}
+</div>
+<div class="table-wrap">
+    <table class="data-table">
+        <thead><tr><th>Краткое название</th><th>Полное название</th><th>Тип</th><th>Руководитель</th><th>Статус</th><th></th></tr></thead>
+        <tbody>
+        {% for org in organizations %}
+        <tr>
+            <td>{{ org.short_name }}{% if current_org and org.id == current_org.id %} <span class="badge badge-info">текущая</span>{% endif %}</td>
+            <td>{{ org.name }}</td>
+            <td>{{ org_types[org.org_type] }}</td>
+            <td>{{ org.head_full_name or '—' }}{% if org.head_position %}<br><span class="muted small">{{ org.head_position }}</span>{% endif %}</td>
+            <td>{% if org.is_active %}<span class="badge badge-success">активна</span>{% else %}<span class="badge">отключена</span>{% endif %}</td>
+            <td><a href="{{ url_for('admin.organization_edit', organization_id=org.id) }}">Изменить</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

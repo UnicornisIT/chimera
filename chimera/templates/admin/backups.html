@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import csrf_field with context %}
+{% block title %}Резервные копии{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div><h1>Резервные копии</h1><p>Копия содержит данные всех организаций. Храните её так же надёжно, как саму базу.</p></div>
+    <div class="page-actions">
+        <form method="post">{{ csrf_field() }}<button type="submit" class="btn"{% if pg_dump_missing %} disabled{% endif %}>Создать копию</button></form>
+    </div>
+</div>
+{% if pg_dump_missing %}
+<div class="flash-message error" role="alert">Программа <code>{{ pg_dump_path }}</code> не найдена. Установите клиент PostgreSQL (пакет <code>postgresql-client</code>) той же основной версии, что и сервер, или укажите полный путь в переменной <code>PG_DUMP_PATH</code>.</div>
+{% endif %}
+<section class="panel">
+    <h2>Состояние базы</h2>
+    <p>СУБД: <strong>{{ 'PostgreSQL' if dialect == 'postgresql' else 'SQLite' }}</strong> ·
+       Ревизия схемы: <code>{{ schema.current or '—' }}</code>
+       {% if schema.up_to_date %}<span class="badge badge-success">актуальна</span>{% else %}<span class="badge badge-warning">требуется {{ schema.head }}</span>{% endif %}</p>
+    <p class="muted small">Каталог копий: {{ backup_dir }} · Хранятся {{ retention_days }} дн. (три последние — всегда).</p>
+</section>
+<div class="table-wrap">
+    <table class="data-table">
+        <thead><tr><th>Файл</th><th>Создан</th><th>Размер</th><th></th></tr></thead>
+        <tbody>
+        {% for b in backups %}
+        <tr>
+            <td><code>{{ b.name }}</code></td>
+            <td>{{ b.created_at|datetime }}</td>
+            <td>{{ '%.1f'|format(b.size / 1048576) }} МБ</td>
+            <td>
+                <a href="{{ url_for('admin.backup_download', name=b.name) }}">Скачать</a>
+                <form method="post" action="{{ url_for('admin.backup_delete', name=b.name) }}" class="inline-form" data-confirm="Удалить копию {{ b.name }}?">
+                    {{ csrf_field() }}<button type="submit" class="link-button">Удалить</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">Копий пока нет.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

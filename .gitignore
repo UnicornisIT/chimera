@@ -1,0 +1,74 @@
+# Локальное окружение и секреты
+.env
+.env.*
+!.env.example
+
+# Образцы документов от пользователя: персональные данные, никогда не коммитятся
+_samples/
+
+# Локальные настройки инструментов разработчика (не для репозитория)
+CLAUDE.md
+.claude/
+AGENTS.md
+.agents/
+.codex/
+.cursor/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Виртуальные окружения
+.venv/
+.venv-*/
+venv/
+
+# Данные приложения, загрузки, бэкапы
+instance/
+uploads/
+backups/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite*
+*.dump
+*.bak
+*.backup
+*.tmp
+
+# Таблицы и выгрузки (кроме будущих встроенных шаблонов)
+*.xlsx
+*.xls
+*.csv
+*.ods
+
+# Ключи и сертификаты
+*.key
+*.pem
+*.pfx
+
+# Журналы и рабочие файлы
+*.log
+logs/
+*.pid
+*.zip
+*.7z
+*.rar
+
+# Редакторы и ОС
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini

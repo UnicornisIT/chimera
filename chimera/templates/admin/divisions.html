@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import csrf_field with context %}
+{% block title %}{{ t.division.nom_pl }} и {{ t.department.nom_pl|lower }}{% endblock %}
+{% macro kind_label(kind) -%}{{ t.division if kind == kinds.DIVISION else t.department }}{%- endmacro %}
+{% macro render_nodes(nodes) %}
+<ul>
+{% for node in nodes %}
+    {% set d = node.division %}
+    <li>
+        <div class="tree-row">
+            <strong>{{ d.name }}</strong>{% if d.short_name %} <span class="muted">({{ d.short_name }})</span>{% endif %}
+            <span class="badge">{{ kind_label(d.kind) }}</span>
+            {% if not d.is_active %}<span class="badge badge-warning">не используется</span>{% endif %}
+            <a href="{{ url_for('admin.division_edit', division_id=d.id) }}">Изменить</a>
+            {% if not node.children %}
+            <form method="post" action="{{ url_for('admin.division_delete', division_id=d.id) }}" class="inline-form" data-confirm="Удалить «{{ d.name }}»?">
+                {{ csrf_field() }}
+                <button type="submit" class="link-button">Удалить</button>
+            </form>
+            {% endif %}
+        </div>
+        {% if node.children %}{{ render_nodes(node.children) }}{% endif %}
+    </li>
+{% endfor %}
+</ul>
+{% endmacro %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ t.division.nom_pl }} и {{ t.department.nom_pl|lower }}</h1>
+        <p>Структура: {{ t.organization.lower }} → {{ t.division.lower }} → {{ t.department.lower }}.</p>
+    </div>
+</div>
+<section class="panel">
+    <h2>Структура</h2>
+    {% if tree %}
+    <div class="tree">{{ render_nodes(tree) }}</div>
+    {% else %}
+    <p class="muted">Подразделений пока нет. Добавьте первое ниже.</p>
+    {% endif %}
+</section>
+<form method="post" class="panel">
+    <h2>Добавить подразделение</h2>
+    {{ csrf_field() }}
+    <div class="form-grid">
+        <div class="form-field">
+            <label for="kind">Вид</label>
+            <select id="kind" name="kind">
+                <option value="{{ kinds.DIVISION.value }}">{{ t.division }}</option>
+                <option value="{{ kinds.DEPARTMENT.value }}">{{ t.department }}</option>
+            </select>
+        </div>
+        <div class="form-field">
+            <label for="parent_id">Входит в</label>
+            <select id="parent_id" name="parent_id">
+                <option value="">— напрямую в {{ t.organization.lower }} —</option>
+                {% for p in parents %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+            </select>
+            <span class="hint">Для {{ t.department.gen_pl }}: выберите {{ t.division.lower }} или оставьте пустым.</span>
+        </div>
+        <div class="form-field">
+            <label for="name">Название</label>
+            <input id="name" name="name" required maxlength="300">
+        </div>
+        <div class="form-field">
+            <label for="short_name">Сокращение</label>
+            <input id="short_name" name="short_name" maxlength="100">
+        </div>
+        <input type="hidden" name="is_active" value="1">
+    </div>
+    <div class="form-actions"><button type="submit" class="btn">Добавить</button></div>
+</form>
+{% endblock %}

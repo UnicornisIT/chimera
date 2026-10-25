@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import csrf_field, role_options, division_options with context %}
+{% block title %}{{ membership.user.full_name }}{% endblock %}
+{% block content %}
+{% set u = membership.user %}
+<div class="page-header">
+    <div><h1>{{ u.full_name }}</h1><p>Логин: {{ u.username }}</p></div>
+    <div class="page-actions"><a class="btn btn-secondary" href="{{ url_for('admin.users') }}">К списку</a></div>
+</div>
+<form method="post" class="panel">
+    <h2>Данные и роль в организации</h2>
+    {{ csrf_field() }}
+    <div class="form-grid">
+        <div class="form-field"><label for="full_name">ФИО</label><input id="full_name" name="full_name" value="{{ u.full_name }}" required></div>
+        <div class="form-field"><label for="email">Почта</label><input id="email" name="email" type="email" value="{{ u.email or '' }}"></div>
+        <div class="form-field">
+            <label for="role">Роль</label>
+            <select id="role" name="role" data-role-select>{{ role_options(roles, membership.role) }}</select>
+        </div>
+        <div class="form-field" data-for-roles="head curator">
+            <label for="division_id">{{ t.division }} / {{ t.department.lower }}</label>
+            <select id="division_id" name="division_id">{{ division_options(divisions, membership.division_id) }}</select>
+        </div>
+        <div class="form-field">
+            <label class="form-check"><input type="checkbox" name="is_active" value="1"{% if membership.is_active %} checked{% endif %}> Доступ к организации включён</label>
+        </div>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn">Сохранить</button></div>
+</form>
+<form method="post" action="{{ url_for('admin.user_reset_password', membership_id=membership.id) }}" class="panel" data-confirm="Установить временный пароль? Текущий пароль перестанет действовать.">
+    <h2>Временный пароль</h2>
+    {{ csrf_field() }}
+    <div class="form-grid">
+        <div class="form-field"><label for="password">Новый временный пароль</label><input id="password" name="password" type="password" required autocomplete="new-password"></div>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-secondary">Установить</button></div>
+</form>
+{% endblock %}

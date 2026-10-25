@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import csrf_field with context %}
+{% block title %}Вход{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/login.css') }}">{% endblock %}
+{% block flashes %}{% endblock %}
+{% block content %}
+<div class="login-page">
+    <form method="post" class="login-card">
+        <div class="login-wordmark"><span class="nav-brand-mark" aria-hidden="true">C</span>{{ app_metadata.name }}</div>
+        <p class="login-subtitle">Рабочее место куратора учебных групп</p>
+        {{ csrf_field() }}
+        <div class="login-field">
+            <label for="username">Логин</label>
+            <input type="text" id="username" name="username" value="{{ username }}" required autocomplete="username" autofocus>
+        </div>
+        <div class="login-field">
+            <label for="password">Пароль</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% for category, message in messages %}
+            <div class="login-message {{ category }}" role="{{ 'alert' if category == 'error' else 'status' }}">{{ message }}</div>
+          {% endfor %}
+        {% endwith %}
+        <div class="login-actions">
+            <button type="submit" class="btn">Войти</button>
+            <a href="{{ url_for('auth.register') }}" class="btn login-btn-secondary">Регистрация</a>
+        </div>
+        <p class="login-links muted">{{ app_metadata.name }} {{ app_version }} · {{ app_metadata.developer_name }}</p>
+    </form>
+</div>
+{% endblock %}
