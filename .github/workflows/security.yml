@@ -11,9 +11,11 @@ on:
 permissions:
   contents: read
 
+# В PR новый push отменяет устаревший прогон. На main, по расписанию и вручную
+# каждый прогон доходит до конца: у него своя группа (run_id).
 concurrency:
-  group: security-${{ github.ref }}
-  cancel-in-progress: true
+  group: security-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   secrets:
