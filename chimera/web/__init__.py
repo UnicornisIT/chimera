@@ -14,7 +14,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from chimera.core import crypto
 from chimera.core.config import AppMode, ConfigError, Settings, load_settings
 from chimera.core.context import NotFound, PermissionDenied
-from chimera.core.db import Database
+from chimera.core.db import Database, utcnow
 from chimera.core.features import FEATURES, FeatureStatus, get_feature
 from chimera.core.metadata import APP_METADATA, app_version
 from chimera.core.migrations import schema_state, upgrade_head
@@ -171,6 +171,7 @@ def _register_template_helpers(app: Flask) -> None:
             "csrf_token": lambda: csrf_token(session),
             "csrf_field_name": CSRF_FORM_FIELD,
             "get_feature": get_feature,
+            "now": utcnow,
         }
 
     @app.template_filter("datetime")

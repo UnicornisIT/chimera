@@ -51,13 +51,14 @@
                 {% for key, value in e.changes.items() %}
                     <li><code>{{ key }}</code>:
                     {% if value is mapping and value.get('changed') and 'old' not in value %}изменено (значение скрыто)
-                    {% elif value is mapping and 'old' in value %}{{ value.old if value.old is not none else '∅' }} → {{ value.new if value.new is not none else '∅' }}
+                    {% elif value is mapping and 'old' in value and value.old is none %}{{ value.new }}
+                    {% elif value is mapping and 'old' in value %}{{ value.old }} → {{ value.new if value.new is not none else '∅' }}
                     {% else %}{{ value }}{% endif %}</li>
                 {% endfor %}
                 </ul>
                 {% endif %}
             </td>
-            <td class="small">{{ e.ip or '' }}</td>
+            <td class="small nowrap">{{ e.ip or '' }}</td>
         </tr>
         {% else %}
         <tr><td colspan="7" class="muted">Записей нет.</td></tr>

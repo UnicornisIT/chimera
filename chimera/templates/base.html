@@ -117,6 +117,7 @@
               {% endif %}
             {% endwith %}
             {% endblock %}
+            {% if authenticated %}<p class="print-only print-header">{{ current_org.name }} · {{ app_metadata.name }} · распечатано {{ now()|datetime }}</p>{% endif %}
             {% block content %}{% endblock %}
             {% if authenticated %}
             <footer class="app-footer">

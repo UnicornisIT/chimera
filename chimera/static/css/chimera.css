@@ -81,6 +81,11 @@ a.module-card:hover, a.module-card:focus-visible { border-color: var(--accent-bo
 .changes li { display: block; }
 .changes code { font-size: 11px; }
 
+/* legacy.css делает любой ul flex-строкой без переносов — сбрасываем для списков-текста. */
+.plain-list { display: block; white-space: normal; padding-left: 18px; margin: 14px 0 0; list-style: disc; text-align: left; }
+.plain-list li { display: list-item; }
+.nowrap, .data-table .badge { white-space: nowrap; }
+
 .tree, .tree ul { list-style: none; margin: 0; padding: 0; display: block; white-space: normal; }
 .tree ul { margin-left: 22px; border-left: 1px dashed var(--border-strong); padding-left: 12px; }
 .tree li { display: block; padding: 6px 0; }
@@ -95,6 +100,9 @@ a.module-card:hover, a.module-card:focus-visible { border-color: var(--accent-bo
 .app-footer a { color: var(--text-secondary); }
 
 /* Планшеты. */
+@media (max-width: 1100px) {
+  .col-optional { display: none; }
+}
 @media (max-width: 1024px) {
   .org-name { max-width: 180px; }
   .org-switcher select { max-width: 200px; }
@@ -119,6 +127,11 @@ a.module-card:hover, a.module-card:focus-visible { border-color: var(--accent-bo
   .data-table tr { break-inside: avoid; }
   a { color: #000 !important; text-decoration: none !important; }
   .print-only { display: block !important; }
+  .table-wrap { overflow: visible !important; }
+  .data-table { font-size: 9pt; }
+  .data-table .badge { background: none !important; color: #000 !important; padding: 0; }
+  .col-optional { display: table-cell !important; }
+  .print-header { margin: 0 0 8pt; font-size: 9pt; color: #000; }
 }
 .print-only { display: none; }
 

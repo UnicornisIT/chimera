@@ -16,21 +16,21 @@
 </form>
 <div class="table-wrap">
     <table class="data-table">
-        <thead><tr><th>ФИО</th><th>Логин</th><th>Роль</th><th>{{ t.division }} / {{ t.department.lower }}</th><th>Статус</th><th>Последний вход</th><th></th></tr></thead>
+        <thead><tr><th>ФИО</th><th>Логин</th><th>Роль</th><th class="col-optional">{{ t.division }} / {{ t.department.lower }}</th><th>Статус</th><th class="col-optional">Последний вход</th><th></th></tr></thead>
         <tbody>
         {% for m in members %}
         <tr>
-            <td>{{ m.user.full_name }}{% if m.user.is_superadmin %} <span class="badge badge-info">системный</span>{% endif %}</td>
+            <td><a href="{{ url_for('admin.user_edit', membership_id=m.id) }}">{{ m.user.full_name }}</a>{% if m.user.is_superadmin %} <span class="badge badge-info">системный</span>{% endif %}</td>
             <td>{{ m.user.username }}</td>
             <td>{{ role_labels[m.role] }}</td>
-            <td>{{ m.division.name if m.division else '—' }}</td>
+            <td class="col-optional">{{ m.division.name if m.division else '—' }}</td>
             <td>
                 {% if not m.is_active %}<span class="badge">отключён в организации</span>
                 {% elif m.user.is_active %}<span class="badge badge-success">активен</span>
                 {% else %}<span class="badge badge-warning">{{ m.user.status.value }}</span>{% endif %}
                 {% if m.user.must_change_password %}<span class="badge badge-warning">сменит пароль</span>{% endif %}
             </td>
-            <td>{{ (m.user.last_login_at|datetime) or '—' }}</td>
+            <td class="col-optional">{{ (m.user.last_login_at|datetime) or '—' }}</td>
             <td><a href="{{ url_for('admin.user_edit', membership_id=m.id) }}">Изменить</a></td>
         </tr>
         {% else %}
