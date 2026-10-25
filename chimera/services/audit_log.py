@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Any, TypeVar
 
 from sqlalchemy import Select, String, cast, func, or_, select
 
@@ -34,9 +35,12 @@ class AuditPage:
     pages: int
 
 
-def _apply(
-    stmt: Select[tuple[AuditLog]], ctx: ServiceContext, f: AuditFilter
-) -> Select[tuple[AuditLog]]:
+# Параметр типа Select различается в SQLAlchemy 2.0 (tuple[...]) и 2.1 (TypeVarTuple),
+# поэтому тип запроса сохраняется через TypeVar, а не записывается явно.
+_Stmt = TypeVar("_Stmt", bound=Select[Any])
+
+
+def _apply(stmt: _Stmt, ctx: ServiceContext, f: AuditFilter) -> _Stmt:
     # Изоляция: только записи текущей организации, даже для системного администратора.
     stmt = stmt.where(AuditLog.organization_id == ctx.require_organization())
     if f.action:
