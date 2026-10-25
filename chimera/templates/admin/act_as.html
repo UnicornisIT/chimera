@@ -40,7 +40,7 @@
             <span class="hint">Выбор группы {{ feature_badge('act_as_starosta_group') }} появится вместе с модулем групп.</span>
         </div>
     </div>
-    <ul class="muted small">
+    <ul class="plain-list muted small">
         {% for role in roles %}<li><strong>{{ role_labels[role] }}</strong> — {{ role_descriptions[role] }}</li>{% endfor %}
     </ul>
     <div class="form-actions"><button type="submit" class="btn">Включить режим</button></div>

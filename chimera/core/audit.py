@@ -66,7 +66,10 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def snapshot(obj: Any, *, exclude: frozenset[str] = frozenset({"updated_at"})) -> Snapshot:
+SNAPSHOT_EXCLUDE = frozenset({"created_at", "updated_at"})
+
+
+def snapshot(obj: Any, *, exclude: frozenset[str] = SNAPSHOT_EXCLUDE) -> Snapshot:
     """Значения колонок модели; чувствительные хранятся только для сравнения."""
     mapper = inspect(type(obj))
     values: dict[str, Any] = {}

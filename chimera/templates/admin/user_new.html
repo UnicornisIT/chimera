@@ -22,7 +22,7 @@
             <select id="division_id" name="division_id">{{ division_options(divisions) }}</select>
         </div>
     </div>
-    <ul class="muted small">
+    <ul class="plain-list muted small">
         {% for role in roles %}<li><strong>{{ role_labels[role] }}</strong> — {{ role_descriptions[role] }}</li>{% endfor %}
     </ul>
     <div class="form-actions"><button type="submit" class="btn">Добавить</button></div>
