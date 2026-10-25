@@ -38,7 +38,7 @@ Issues = "https://github.com/UnicornisIT/chimera/issues"
 
 [project.optional-dependencies]
 prod = [
-    "gunicorn>=23.0,<24.0",
+    "gunicorn>=26.2,<27.0",
 ]
 desktop = [
     "pywebview>=5.0,<7.0",

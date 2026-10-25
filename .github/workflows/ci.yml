@@ -118,3 +118,52 @@ jobs:
           alembic check
       - name: pytest
         run: pytest
+
+  docker:
+    name: Docker-образ (сборка и запуск)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Сгенерировать одноразовый .env
+        run: |
+          python3 - <<'PY'
+          import base64, os, secrets
+          values = {
+              "SECRET_KEY": secrets.token_urlsafe(48),
+              "DATA_ENCRYPTION_KEY": base64.urlsafe_b64encode(os.urandom(32)).decode(),
+              "POSTGRES_PASSWORD": secrets.token_urlsafe(24),
+              "ADMIN_DEFAULT_PASSWORD": "Ci-" + secrets.token_urlsafe(16) + "-9",
+              "SESSION_COOKIE_SECURE": "false",
+          }
+          with open(".env", "w", encoding="utf-8") as fh:
+              fh.writelines(f"{k}={v}\n" for k, v in values.items())
+          PY
+      - name: Собрать и запустить docker compose
+        run: >-
+          docker compose -f deploy/docker-compose.yml --env-file .env
+          up -d --build --wait --wait-timeout 300
+      - name: Проверить приложение через nginx
+        run: |
+          code=$(curl -s -o login.html -w '%{http_code}' -D headers.txt http://localhost/login)
+          test "$code" = "200"
+          grep -q 'Chimera' login.html
+          grep -qi '^content-security-policy:' headers.txt
+          grep -qi '^x-frame-options: DENY' headers.txt
+      - name: Проверить содержимое образа
+        run: |
+          compose="docker compose -f deploy/docker-compose.yml --env-file .env"
+          $compose exec -T app python -m chimera status
+          $compose exec -T app gunicorn --version
+          $compose exec -T app pg_dump --version | grep -q ' 16\.'
+          $compose exec -T app soffice --version
+          $compose exec -T app fc-list | grep -qi 'Liberation Serif'
+          $compose exec -T app sh -c 'test "$(id -u)" != 0'
+      - name: Журналы контейнеров
+        if: failure()
+        run: docker compose -f deploy/docker-compose.yml --env-file .env logs --no-color
+      - name: Остановить
+        if: always()
+        run: docker compose -f deploy/docker-compose.yml --env-file .env down -v
