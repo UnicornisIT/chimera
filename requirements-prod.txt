@@ -1,2 +1,2 @@
 -r requirements.txt
-gunicorn>=26.2,<27.0
+gunicorn>=26.2,<28.0
