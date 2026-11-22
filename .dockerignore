@@ -4,6 +4,8 @@
 .venv-*
 venv
 instance
+.chimera-test-envs
+scripts/dev_test_*.py
 uploads
 backups
 _samples
