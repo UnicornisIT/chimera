@@ -33,6 +33,7 @@ dist/
 venv/
 
 # Данные приложения, загрузки, бэкапы
+/.chimera-test-envs/
 instance/
 uploads/
 backups/
