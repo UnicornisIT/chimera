@@ -114,7 +114,7 @@ def login(page: Page, base: str, password: str) -> None:
         page.locator("#new_password").fill(changed_password)
         page.locator("#new_password_confirm").fill(changed_password)
         page.get_by_role("button", name="Сохранить пароль").click()
-        expect(page.get_by_role("status")).to_contain_text("Пароль изменён")
+        expect(page.get_by_role("status").filter(has_text="Пароль изменён")).to_be_visible()
     expect(page).to_have_url(base + "/")
 
 
@@ -251,7 +251,7 @@ def check_keyboard_and_filters(page: Page, base: str) -> None:
     expect(menu).to_be_focused()
 
     open_route(page, base, "/admin/users")
-    table = page.get_by_role("region", name="Таблица")
+    table = page.get_by_role("region", name="Пользователи")
     table.focus()
     expect(table).to_have_css("outline-style", "solid")
     page.keyboard.press("ArrowRight")
@@ -331,21 +331,19 @@ def check_backup_actions(page: Page, base: str) -> None:
     download = page.get_by_role("button", name="Скачать").first
     if not download.is_visible():
         page.get_by_role("button", name="Создать копию").click()
-        expect(page.get_by_role("status")).to_contain_text("создана")
+        expect(page.get_by_role("status").filter(has_text="создана")).to_be_visible()
     delete = page.get_by_role("button", name="Удалить").first
     expect(delete).to_be_enabled()
     with page.expect_download() as result:
         download.click()
     assert result.value.failure() is None
-    dialogs = []
-
-    def cancel(dialog):
-        dialogs.append(dialog.type)
-        dialog.dismiss()
-
-    page.once("dialog", cancel)
+    open_route(page, base, "/admin/backups")
     delete.click()
-    assert dialogs == ["confirm"], dialogs
+    expect(page.get_by_role("dialog")).to_be_visible()
+    expect(page.get_by_role("button", name="Отмена")).to_be_focused()
+    page.keyboard.press("Escape")
+    expect(page.get_by_role("dialog")).not_to_be_visible()
+    expect(delete).to_be_focused()
     expect(download).to_be_visible()
 
 
@@ -401,7 +399,7 @@ def main() -> None:
         private.locator(".user-menu summary").click()
         private.get_by_role("button", name="Выйти").click()
         expect(private).to_have_url(base + "/login")
-        expect(private.get_by_role("status")).to_contain_text("Вы вышли из системы")
+        expect(private.get_by_role("status").filter(has_text="Вы вышли из системы")).to_be_visible()
         expect(private.locator("html")).to_have_attribute("data-theme", "dark")
 
         no_js = browser.new_page(java_script_enabled=False, color_scheme="dark")

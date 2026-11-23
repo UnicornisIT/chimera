@@ -6,14 +6,13 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, TypeVar
 
-from sqlalchemy import Select, String, cast, func, or_, select
+from sqlalchemy import Select, String, cast, or_, select
 
 from chimera.core.audit import AuditLog
 from chimera.core.context import ServiceContext
 from chimera.core.permissions import Permission
 from chimera.core.validation import clean_text
-
-PAGE_SIZE = 50
+from chimera.services.listing import Page, contains_text, paginate
 
 
 @dataclass(slots=True)
@@ -21,18 +20,11 @@ class AuditFilter:
     query: str | None = None
     action: str | None = None
     user_id: int | None = None
+    actor: str | None = None
     acting_only: bool = False
     date_from: date | None = None
     date_to: date | None = None
     page: int = 1
-
-
-@dataclass(frozen=True, slots=True)
-class AuditPage:
-    items: list[AuditLog]
-    total: int
-    page: int
-    pages: int
 
 
 # Параметр типа Select различается в SQLAlchemy 2.0 (tuple[...]) и 2.1 (TypeVarTuple),
@@ -44,8 +36,10 @@ def _apply(stmt: _Stmt, ctx: ServiceContext, f: AuditFilter) -> _Stmt:
     # Изоляция: только записи текущей организации, даже для системного администратора.
     stmt = stmt.where(AuditLog.organization_id == ctx.require_organization())
     if f.action:
-        stmt = stmt.where(AuditLog.action.startswith(f.action))
-    if f.user_id:
+        stmt = stmt.where(AuditLog.action.startswith(f.action, autoescape=True))
+    if f.actor:
+        stmt = stmt.where(AuditLog.username == f.actor)
+    elif f.user_id:
         stmt = stmt.where(AuditLog.user_id == f.user_id)
     if f.acting_only:
         stmt = stmt.where(
@@ -53,38 +47,43 @@ def _apply(stmt: _Stmt, ctx: ServiceContext, f: AuditFilter) -> _Stmt:
         )
     if f.date_from:
         stmt = stmt.where(AuditLog.created_at >= datetime.combine(f.date_from, time.min, UTC))
-    if f.date_to:
+    if f.date_to and f.date_to < date.max:
         end = datetime.combine(f.date_to + timedelta(days=1), time.min, UTC)
         stmt = stmt.where(AuditLog.created_at < end)
-    if f.query:
-        pattern = f"%{clean_text(f.query, max_length=100).lower()}%"
+    if f.query and (text := clean_text(f.query, max_length=100)):
         stmt = stmt.where(
             or_(
-                func.lower(AuditLog.username).like(pattern),
-                func.lower(AuditLog.action).like(pattern),
-                func.lower(AuditLog.message).like(pattern),
-                func.lower(AuditLog.entity_type).like(pattern),
+                contains_text(ctx.session, AuditLog.username, text),
+                contains_text(ctx.session, AuditLog.action, text),
+                contains_text(ctx.session, AuditLog.message, text),
+                contains_text(ctx.session, AuditLog.entity_type, text),
                 AuditLog.entity_id == f.query.strip(),
-                func.lower(cast(AuditLog.changes, String)).like(pattern),
+                contains_text(ctx.session, cast(AuditLog.changes, String), text),
             )
         )
     return stmt
 
 
-def search(ctx: ServiceContext, f: AuditFilter) -> AuditPage:
+def search(ctx: ServiceContext, f: AuditFilter) -> Page[AuditLog]:
     ctx.require(Permission.AUDIT_VIEW)
     base = _apply(select(AuditLog), ctx, f)
-    total = ctx.session.scalar(select(func.count()).select_from(base.subquery())) or 0
-    pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
-    page = min(max(1, f.page), pages)
-    items = list(
-        ctx.session.scalars(
-            base.order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
-            .limit(PAGE_SIZE)
-            .offset((page - 1) * PAGE_SIZE)
-        )
+    return paginate(
+        ctx.session, base.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()), f.page
     )
-    return AuditPage(items, total, page, pages)
+
+
+def suggested_actors(ctx: ServiceContext) -> list[str]:
+    ctx.require(Permission.AUDIT_VIEW)
+    stmt = (
+        select(AuditLog.username)
+        .where(
+            AuditLog.organization_id == ctx.require_organization(), AuditLog.username.is_not(None)
+        )
+        .distinct()
+        .order_by(AuditLog.username)
+        .limit(50)
+    )
+    return [name for name in ctx.session.scalars(stmt) if name]
 
 
 def known_actions(ctx: ServiceContext) -> list[str]:

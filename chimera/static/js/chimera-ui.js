@@ -114,37 +114,31 @@
     syncTheme();
   }
 
-  // Кнопки доступны после регистрации обработчика подтверждения.
-  document.addEventListener('submit', (event) => {
-    const form = event.target;
-    const text = form.dataset.confirm;
-    if (text && !window.confirm(text)) event.preventDefault();
-  }, true);
-  document.querySelectorAll('[data-confirm] [data-confirm-submit]').forEach((button) => {
-    button.disabled = false;
-  });
-
   // Селекты с data-autosubmit отправляют форму при изменении (переключатель организации).
   document.querySelectorAll('select[data-autosubmit]').forEach((select) => {
     select.addEventListener('change', () => select.form?.requestSubmit());
   });
 
-  // Поля, зависящие от выбранной роли (подразделение, пользователь).
-  document.querySelectorAll('[data-role-select]').forEach((select) => {
-    const form = select.closest('form');
-    const sync = () => {
-      form.querySelectorAll('[data-for-roles]').forEach((field) => {
-        const roles = field.dataset.forRoles.split(' ');
-        const visible = roles.includes(select.value);
-        field.hidden = !visible;
-        field.querySelectorAll('select, input').forEach((input) => { input.disabled = !visible; });
-      });
-    };
-    select.addEventListener('change', sync);
-    sync();
-  });
+  function initContent() {
+    // Поля, зависящие от выбранной роли (подразделение, пользователь).
+    document.querySelectorAll('[data-role-select]').forEach((select) => {
+      const form = select.closest('form');
+      const sync = () => {
+        form.querySelectorAll('[data-for-roles]').forEach((field) => {
+          const roles = field.dataset.forRoles.split(' ');
+          const visible = roles.includes(select.value);
+          field.hidden = !visible;
+          field.querySelectorAll('select, input').forEach((input) => { input.disabled = !visible; });
+        });
+      };
+      select.addEventListener('change', sync);
+      sync();
+    });
 
-  document.querySelectorAll('[data-print]').forEach((button) => {
-    button.addEventListener('click', () => window.print());
-  });
+    document.querySelectorAll('[data-print]').forEach((button) => {
+      button.addEventListener('click', () => window.print());
+    });
+  }
+  initContent();
+  document.addEventListener('chimera:content', initContent);
 })();

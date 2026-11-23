@@ -73,6 +73,11 @@
         {% endif %}
         <main class="app-content" id="main-content" tabindex="-1">
             {% if not authenticated %}<div class="auth-actions">{{ theme_toggle() }}</div>{% endif %}
+            <div class="flash-message error" role="alert" tabindex="-1" id="connection-message" hidden>
+                <p data-connection-text></p>
+                <a class="btn btn-secondary" href="{{ request.path }}">Проверить страницу</a>
+            </div>
+            <p id="form-progress" class="sr-only" role="status"></p>
             {% block flashes %}{{ flash_messages() }}{% endblock %}
             {% if authenticated %}<p class="print-only print-header">{{ current_org.name }} · {{ app_metadata.name }} · распечатано {{ now()|datetime }}</p>{% endif %}
             {% block content %}{% endblock %}
@@ -83,7 +88,16 @@
             {% endif %}
         </main>
     </div>
+    <dialog class="confirm-dialog panel" id="action-confirmation" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+        <h2 id="confirm-title"></h2>
+        <p id="confirm-message"></p>
+        <form method="dialog" class="form-actions">
+            <button type="submit" class="btn btn-secondary" value="cancel" autofocus>Отмена</button>
+            <button type="submit" class="btn btn-danger" value="accept" data-confirm-accept></button>
+        </form>
+    </dialog>
     <script src="{{ url_for('static', filename='js/chimera-ui.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/forms.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/user-menu.js') }}" defer></script>
 </body>
 </html>

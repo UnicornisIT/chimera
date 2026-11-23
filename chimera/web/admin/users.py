@@ -6,13 +6,22 @@ from typing import Any
 
 from flask import flash, redirect, render_template, request, session, url_for
 
-from chimera.core.context import ServiceError
+from chimera.core.context import FieldErrors, ServiceError
 from chimera.core.permissions import ACTABLE_ROLES, ROLE_DESCRIPTIONS, Permission, Role
 from chimera.services import impersonation
 from chimera.services import organizations as org_service
 from chimera.services import users as users_service
 from chimera.web.admin import bp
-from chimera.web.context import SESSION_ACT_AS, ctx, db, form_bool, form_int, permission_required
+from chimera.web.context import (
+    SESSION_ACT_AS,
+    ctx,
+    db,
+    form_bool,
+    form_int,
+    permission_required,
+    require_confirmation,
+    text_arg,
+)
 
 
 def _role_filter() -> Role | None:
@@ -26,14 +35,17 @@ def _role_filter() -> Role | None:
 @permission_required(Permission.USERS_MANAGE)
 def users() -> Any:
     current = ctx()
+    query = text_arg("q", 100)
+    role = _role_filter()
     return render_template(
         "admin/users.html",
-        members=users_service.list_members(
-            current, query=request.args.get("q"), role=_role_filter()
+        page=users_service.search_members(
+            current, query=query, role=role, page=request.args.get("page", 1, type=int)
         ),
         roles=list(Role),
-        query=request.args.get("q", ""),
-        selected_role=_role_filter(),
+        query=query,
+        selected_role=role,
+        filters={"q": query, "role": role.value if role else ""},
     )
 
 
@@ -41,6 +53,7 @@ def users() -> Any:
 @permission_required(Permission.USERS_MANAGE)
 def user_new() -> Any:
     current = ctx()
+    errors: dict[str, str] = {}
     if request.method == "POST":
         data = users_service.NewUserData(
             username=request.form.get("username", ""),
@@ -54,7 +67,10 @@ def user_new() -> Any:
             users_service.create_member(current, data)
         except ServiceError as exc:
             db().rollback()
-            flash(str(exc), "error")
+            if isinstance(exc, FieldErrors):
+                errors = exc.errors
+            else:
+                flash(str(exc), "error")
         else:
             db().commit()
             flash("Пользователь добавлен. При первом входе он сменит пароль.", "success")
@@ -65,6 +81,8 @@ def user_new() -> Any:
         role_descriptions=ROLE_DESCRIPTIONS,
         divisions=org_service.list_divisions(current, include_inactive=False),
         form=request.form,
+        errors=errors,
+        selected_division=form_int("division_id"),
     )
 
 
@@ -73,6 +91,7 @@ def user_new() -> Any:
 def user_edit(membership_id: int) -> Any:
     current = ctx()
     membership = users_service.get_membership(current, membership_id)
+    errors: dict[str, str] = {}
     if request.method == "POST":
         data = users_service.MembershipData(
             role=request.form.get("role", ""),
@@ -85,7 +104,10 @@ def user_edit(membership_id: int) -> Any:
             users_service.update_member(current, membership_id, data)
         except ServiceError as exc:
             db().rollback()
-            flash(str(exc), "error")
+            if isinstance(exc, FieldErrors):
+                errors = exc.errors
+            else:
+                flash(str(exc), "error")
         else:
             db().commit()
             flash("Изменения сохранены.", "success")
@@ -93,6 +115,9 @@ def user_edit(membership_id: int) -> Any:
     return render_template(
         "admin/user_edit.html",
         membership=membership,
+        form=request.form,
+        errors=errors,
+        selected_division=form_int("division_id"),
         can_manage_account=users_service.can_manage_account(current, membership),
         roles=list(Role),
         divisions=org_service.list_divisions(current, include_inactive=False),
@@ -102,6 +127,7 @@ def user_edit(membership_id: int) -> Any:
 @bp.post("/users/<int:membership_id>/password")
 @permission_required(Permission.USERS_MANAGE)
 def user_reset_password(membership_id: int) -> Any:
+    require_confirmation()
     try:
         users_service.reset_password(ctx(), membership_id, request.form.get("password", ""))
     except ServiceError as exc:
@@ -144,6 +170,7 @@ def request_approve(request_id: int) -> Any:
 @bp.post("/requests/<int:request_id>/reject")
 @permission_required(Permission.REQUESTS_APPROVE)
 def request_reject(request_id: int) -> Any:
+    require_confirmation()
     try:
         users_service.reject_request(ctx(), request_id)
     except ServiceError as exc:

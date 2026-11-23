@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import joinedload
 
 from chimera.core import audit
-from chimera.core.context import NotFound, PermissionDenied, ServiceContext, ServiceError
+from chimera.core.context import (
+    FieldErrors,
+    NotFound,
+    PermissionDenied,
+    ServiceContext,
+    ServiceError,
+)
 from chimera.core.db import utcnow
 from chimera.core.permissions import Permission, Role
 from chimera.core.security import hash_password, password_problems
@@ -28,6 +35,7 @@ from chimera.models import (
     User,
     UserStatus,
 )
+from chimera.services.listing import Page, contains_text, paginate
 
 DIVISION_ROLES = frozenset({Role.HEAD, Role.CURATOR})
 
@@ -35,25 +43,35 @@ DIVISION_ROLES = frozenset({Role.HEAD, Role.CURATOR})
 def list_members(
     ctx: ServiceContext, *, query: str | None = None, role: Role | None = None
 ) -> list[Membership]:
+    return list(ctx.session.scalars(_member_query(ctx, query, role)))
+
+
+def search_members(
+    ctx: ServiceContext, *, query: str | None, role: Role | None, page: int
+) -> Page[Membership]:
+    return paginate(ctx.session, _member_query(ctx, query, role), page)
+
+
+def _member_query(ctx: ServiceContext, query: str | None, role: Role | None) -> Select[Any]:
     ctx.require(Permission.USERS_MANAGE)
     stmt = (
         select(Membership)
         .join(User, User.id == Membership.user_id)
         .options(joinedload(Membership.user), joinedload(Membership.division))
-        .order_by(User.full_name)
+        .where(Membership.organization_id == ctx.require_organization())
+        .order_by(User.full_name, Membership.id)
     )
     if role is not None:
         stmt = stmt.where(Membership.role == role)
-    if query:
-        pattern = f"%{clean_text(query).lower()}%"
+    if query and (text := clean_text(query, max_length=100)):
         stmt = stmt.where(
             or_(
-                User.username.ilike(pattern),
-                User.full_name.ilike(pattern),
-                User.email.ilike(pattern),
+                contains_text(ctx.session, User.username, text),
+                contains_text(ctx.session, User.full_name, text),
+                contains_text(ctx.session, User.email, text),
             )
         )
-    return list(ctx.session.scalars(stmt).unique())
+    return stmt
 
 
 def members_with_role(ctx: ServiceContext, role: Role) -> list[Membership]:
@@ -89,7 +107,7 @@ def _division_for(ctx: ServiceContext, role: Role, division_id: int | None) -> i
         return None
     division = ctx.session.scalar(select(Division.id).where(Division.id == division_id))
     if division is None:
-        raise ServiceError("Подразделение не найдено.")
+        raise FieldErrors({"division_id": "Подразделение не найдено."})
     return division
 
 
@@ -107,7 +125,7 @@ def _parse_role(raw: str) -> Role:
     try:
         return Role(raw)
     except ValueError as exc:
-        raise ServiceError("Выберите роль.") from exc
+        raise FieldErrors({"role": "Выберите роль."}) from exc
 
 
 def create_member(ctx: ServiceContext, data: NewUserData) -> Membership:
@@ -117,20 +135,21 @@ def create_member(ctx: ServiceContext, data: NewUserData) -> Membership:
     role = _parse_role(data.role)
     login = normalize_username(data.username)
     if (problem := username_problem(login)) is not None:
-        raise ServiceError(problem)
+        raise FieldErrors({"username": problem})
 
     user = ctx.session.scalar(select(User).where(User.username == login))
     if user is None:
-        problems: list[str] = []
+        problems: dict[str, str] = {}
         full_name = clean_text(data.full_name, max_length=300)
         if not full_name:
-            problems.append("Укажите ФИО.")
+            problems["full_name"] = "Укажите ФИО."
         email = normalize_email(data.email)
         if (email_issue := email_problem(email)) is not None:
-            problems.append(email_issue)
-        problems.extend(password_problems(data.password, username=login))
+            problems["email"] = email_issue
+        if password_issues := password_problems(data.password, username=login):
+            problems["password"] = " ".join(password_issues)
         if problems:
-            raise ServiceError(" ".join(problems))
+            raise FieldErrors(problems)
         user = User(
             username=login,
             full_name=full_name,
@@ -142,7 +161,7 @@ def create_member(ctx: ServiceContext, data: NewUserData) -> Membership:
         ctx.session.flush()
         audit.record(ctx, "user.created", entity=user, after=audit.snapshot(user))
     elif ctx.session.scalar(select(Membership.id).where(Membership.user_id == user.id)) is not None:
-        raise ServiceError("Пользователь уже состоит в этой организации.")
+        raise FieldErrors({"username": "Пользователь уже состоит в этой организации."})
 
     membership = Membership(
         user_id=user.id,
@@ -191,9 +210,9 @@ def update_member(ctx: ServiceContext, membership_id: int, data: MembershipData)
     full_name = clean_text(data.full_name, max_length=300)
     email = normalize_email(data.email)
     if not full_name:
-        raise ServiceError("Укажите ФИО.")
+        raise FieldErrors({"full_name": "Укажите ФИО."})
     if (problem := email_problem(email)) is not None:
-        raise ServiceError(problem)
+        raise FieldErrors({"email": problem})
 
     if (full_name, email) != (user.full_name, user.email):
         if not can_manage_account(ctx, membership):

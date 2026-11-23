@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 
-from chimera.core.context import ServiceError
+from chimera.core.context import FieldErrors, ServiceError
 from chimera.core.security import PASSWORD_MIN_LENGTH
 from chimera.services import auth as auth_service
 from chimera.web.context import (
@@ -84,9 +84,10 @@ def register() -> Any:
     session_db = db()
     organizations = auth_service.registration_organizations(session_db)
     form = request.form
+    errors: dict[str, str] = {}
     if request.method == "POST":
         if form.get("password") != form.get("password_confirm"):
-            flash("Пароли не совпадают.", "error")
+            errors = {"password_confirm": "Пароли не совпадают."}
         else:
             try:
                 auth_service.register(
@@ -99,9 +100,9 @@ def register() -> Any:
                     comment=form.get("comment"),
                     ip=client_ip(),
                 )
-            except ServiceError as exc:
+            except FieldErrors as exc:
                 session_db.rollback()
-                flash(str(exc), "error")
+                errors = exc.errors
             else:
                 session_db.commit()
                 flash("Заявка отправлена. Войти можно после одобрения администратором.", "success")
@@ -111,6 +112,7 @@ def register() -> Any:
         organizations=organizations,
         form=form,
         password_min_length=PASSWORD_MIN_LENGTH,
+        errors=errors,
     )
 
 
@@ -119,18 +121,19 @@ def change_password() -> Any:
     user = state().user
     if user is None:
         return redirect(url_for("auth.login"))
+    errors: dict[str, str] = {}
     if request.method == "POST":
         new = request.form.get("new_password", "")
         if new != request.form.get("new_password_confirm", ""):
-            flash("Новые пароли не совпадают.", "error")
+            errors = {"new_password_confirm": "Новые пароли не совпадают."}
         else:
             try:
                 auth_service.change_password(
                     ctx(), user, request.form.get("current_password", ""), new
                 )
-            except ServiceError as exc:
+            except FieldErrors as exc:
                 db().rollback()
-                flash(str(exc), "error")
+                errors = exc.errors
             else:
                 db().commit()
                 refresh_auth_version(user)
@@ -140,6 +143,7 @@ def change_password() -> Any:
         "auth/change_password.html",
         forced=user.must_change_password,
         password_min_length=PASSWORD_MIN_LENGTH,
+        errors=errors,
     )
 
 

@@ -1,13 +1,15 @@
 {% extends "base.html" %}
-{% from "_ui_macros.html" import csrf_field, role_options, division_options with context %}
+{% from "_ui_macros.html" import table_hint %}
+{% from "_ui_macros.html" import csrf_field, role_options, division_options, confirm_button with context %}
 {% block title %}Заявки на доступ{% endblock %}
 {% block content %}
 <div class="page-header">
     <div><h1>Заявки на доступ</h1><p>Саморегистрации в организации «{{ current_org.short_name }}».</p></div>
 </div>
-<div class="table-wrap" role="region" aria-label="Таблица" tabindex="0">
+{{ table_hint() }}
+<div class="table-wrap" role="region" aria-label="Заявки на доступ" tabindex="0">
     <table class="data-table">
-        <thead><tr><th>Подана</th><th>ФИО</th><th>Логин / почта</th><th>Комментарий</th><th>Решение</th></tr></thead>
+        <thead><tr><th scope="col">Подана</th><th scope="col">ФИО</th><th scope="col">Логин / почта</th><th scope="col">Комментарий</th><th scope="col">Решение</th></tr></thead>
         <tbody>
         {% for r in requests %}
         <tr>
@@ -26,9 +28,9 @@
                     </span>
                     <button type="submit" class="btn">Одобрить</button>
                 </form>
-                <form method="post" action="{{ url_for('admin.request_reject', request_id=r.id) }}" class="inline-form" data-confirm="Отклонить заявку {{ r.user.full_name }}?">
+                <form method="post" action="{{ url_for('admin.request_reject', request_id=r.id) }}" class="inline-form" data-confirm-title="Отклонить заявку?" data-confirm="По заявке пользователя «{{ r.user.full_name }}» доступ не будет предоставлен.">
                     {{ csrf_field() }}
-                    <button type="submit" class="btn btn-secondary" data-confirm-submit disabled>Отклонить</button>
+                    {{ confirm_button('Отклонить') }}
                 </form>
             </td>
         </tr>

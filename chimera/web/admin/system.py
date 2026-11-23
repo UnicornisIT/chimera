@@ -12,9 +12,16 @@ from chimera.core.migrations import schema_state
 from chimera.core.permissions import Permission, SystemPermission
 from chimera.services import audit_log
 from chimera.services import backup as backup_service
-from chimera.services import users as users_service
 from chimera.web.admin import bp
-from chimera.web.context import ctx, database, db, permission_required, system_required
+from chimera.web.context import (
+    ctx,
+    database,
+    db,
+    permission_required,
+    require_confirmation,
+    system_required,
+    text_arg,
+)
 
 
 def _date_arg(name: str) -> date | None:
@@ -35,10 +42,12 @@ def _int_arg(name: str, default: int | None = None) -> int | None:
 @permission_required(Permission.AUDIT_VIEW)
 def audit() -> Any:
     current = ctx()
+    user_id = _int_arg("user_id") or 0
     filters = audit_log.AuditFilter(
-        query=request.args.get("q") or None,
-        action=request.args.get("action") or None,
-        user_id=_int_arg("user_id"),
+        query=text_arg("q", 100) or None,
+        action=text_arg("action", 64) or None,
+        user_id=user_id if 0 < user_id <= 2**31 - 1 else None,
+        actor=text_arg("actor", 150).lower() or None,
         acting_only=request.args.get("acting") == "1",
         date_from=_date_arg("from"),
         date_to=_date_arg("to"),
@@ -49,8 +58,20 @@ def audit() -> Any:
         page=audit_log.search(current, filters),
         filters=filters,
         actions=audit_log.known_actions(current),
-        members=users_service.list_members(current),
-        args=request.args,
+        actors=audit_log.suggested_actors(current),
+        page_filters={
+            key: value
+            for key, value in {
+                "q": filters.query,
+                "action": filters.action,
+                "actor": filters.actor,
+                "user_id": filters.user_id if not filters.actor else None,
+                "from": filters.date_from.isoformat() if filters.date_from else None,
+                "to": filters.date_to.isoformat() if filters.date_to else None,
+                "acting": 1 if filters.acting_only else None,
+            }.items()
+            if value
+        },
     )
 
 
@@ -101,6 +122,7 @@ def backup_download(name: str) -> Any:
 @bp.post("/backups/<name>/delete")
 @system_required(SystemPermission.BACKUPS_MANAGE)
 def backup_delete(name: str) -> Any:
+    require_confirmation()
     settings = current_app.extensions["chimera.settings"]
     backup_service.delete_backup(ctx(), settings, name)
     db().commit()

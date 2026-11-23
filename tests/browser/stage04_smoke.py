@@ -195,6 +195,7 @@ def check_roles(base: str, password: str, screenshots: Path) -> None:
                 page.set_viewport_size({"width": 375, "height": 900})
                 page.screenshot(path=screenshots / "acting-mobile-light.png")
                 page.get_by_role("button", name="Вернуться").click()
+                expect(page.locator(".role-banner")).to_be_hidden()
                 open_route(page, base, "/admin/users")
                 toggle.click()
                 expect(page.locator(".nav-brand")).to_be_focused()

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from chimera.core import audit
 from chimera.core.config import Settings
-from chimera.core.context import ServiceContext, ServiceError
+from chimera.core.context import FieldErrors, ServiceContext, ServiceError
 from chimera.core.db import utcnow
 from chimera.core.permissions import Role
 from chimera.core.security import hash_password, password_problems, verify_password
@@ -120,9 +120,9 @@ def authenticate(
 
 def change_password(ctx: ServiceContext, user: User, current: str, new: str) -> None:
     if not verify_password(user.password_hash, current):
-        raise ServiceError("Текущий пароль указан неверно.")
+        raise FieldErrors({"current_password": "Текущий пароль указан неверно."})
     if current == new:
-        raise ServiceError("Новый пароль должен отличаться от текущего.")
+        raise FieldErrors({"new_password": "Новый пароль должен отличаться от текущего."})
     set_password(ctx, user, new, must_change=False, action="auth.password_changed")
 
 
@@ -136,7 +136,8 @@ def set_password(
 ) -> None:
     problems = password_problems(new, username=user.username)
     if problems:
-        raise ServiceError(" ".join(problems))
+        field = "password" if must_change else "new_password"
+        raise FieldErrors({field: " ".join(problems)})
     before = audit.snapshot(user)
     user.password_hash = hash_password(new)
     user.must_change_password = must_change
@@ -161,20 +162,23 @@ def register(
 ) -> User:
     """Саморегистрация: пользователь без роли и заявка, которую одобряет администратор."""
     login = normalize_username(username)
-    problems = [p for p in (username_problem(login),) if p]
+    problems: dict[str, str] = {}
+    if issue := username_problem(login):
+        problems["username"] = issue
     name = clean_text(full_name, max_length=300)
     if not name:
-        problems.append("Укажите ФИО.")
+        problems["full_name"] = "Укажите ФИО."
     mail = normalize_email(email)
     if (problem := email_problem(mail)) is not None:
-        problems.append(problem)
-    problems.extend(password_problems(password, username=login))
+        problems["email"] = problem
+    if password_issues := password_problems(password, username=login):
+        problems["password"] = " ".join(password_issues)
     if organization_id not in _org_ids_open_for_registration(session):
-        problems.append("Выберите организацию из списка.")
+        problems["organization_id"] = "Выберите организацию из списка."
     if session.scalar(select(User.id).where(User.username == login)) is not None:
-        problems.append("Такой логин уже занят.")
+        problems["username"] = "Такой логин уже занят."
     if problems:
-        raise ServiceError(" ".join(problems))
+        raise FieldErrors(problems)
 
     user = User(
         username=login,

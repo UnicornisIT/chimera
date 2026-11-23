@@ -1,37 +1,41 @@
 {% extends "base.html" %}
+{% from "_ui_macros.html" import table_hint, pagination %}
 {% block title %}Журнал аудита{% endblock %}
-{% macro page_url(number) -%}
-{%- set params = dict(args) -%}{%- set _ = params.update({'page': number}) -%}{{ url_for('admin.audit', **params) }}
-{%- endmacro %}
 {% block content %}
 <div class="page-header">
     <div><h1>Журнал аудита</h1><p>Записей: {{ page.total }}. Показаны действия только в организации «{{ current_org.short_name }}».</p></div>
     <div class="page-actions"><button type="button" class="btn btn-secondary" data-print>Печать</button></div>
 </div>
 <form method="get" class="filter-bar">
-    <div class="form-field"><label for="q">Поиск</label><input id="q" name="q" value="{{ args.get('q', '') }}" placeholder="Логин, действие, объект"></div>
+    <div class="form-field"><label for="q">Поиск</label><input id="q" name="q" value="{{ filters.query or '' }}" placeholder="Логин, действие, объект"></div>
     <div class="form-field">
         <label for="action">Действие</label>
         <select id="action" name="action">
             <option value="">Все</option>
+            {% if filters.action and filters.action not in actions %}<option value="{{ filters.action }}" selected>{{ filters.action }}</option>{% endif %}
             {% for a in actions %}<option value="{{ a }}"{% if filters.action == a %} selected{% endif %}>{{ a }}</option>{% endfor %}
         </select>
     </div>
     <div class="form-field">
-        <label for="user_id">Пользователь</label>
-        <select id="user_id" name="user_id">
-            <option value="">Все</option>
-            {% for m in members %}<option value="{{ m.user_id }}"{% if filters.user_id == m.user_id %} selected{% endif %}>{{ m.user.full_name }}</option>{% endfor %}
-        </select>
+        <label for="actor">Логин пользователя</label>
+        <input id="actor" name="actor" list="audit-actors" value="{{ filters.actor or '' }}" maxlength="150" autocomplete="off">
+        <datalist id="audit-actors">
+            {% for actor in actors %}<option value="{{ actor }}"></option>{% endfor %}
+        </datalist>
+        {% if filters.user_id and not filters.actor %}
+        <input type="hidden" name="user_id" value="{{ filters.user_id }}">
+        <span class="hint">Применён фильтр по номеру пользователя из ссылки.</span>
+        {% endif %}
     </div>
-    <div class="form-field"><label for="from">С</label><input id="from" name="from" type="date" value="{{ args.get('from', '') }}"></div>
-    <div class="form-field"><label for="to">По</label><input id="to" name="to" type="date" value="{{ args.get('to', '') }}"></div>
+    <div class="form-field"><label for="from">С</label><input id="from" name="from" type="date" value="{{ page_filters.get('from', '') }}"></div>
+    <div class="form-field"><label for="to">По</label><input id="to" name="to" type="date" value="{{ page_filters.get('to', '') }}"></div>
     <label class="form-check"><input type="checkbox" name="acting" value="1"{% if filters.acting_only %} checked{% endif %}> Только в режиме «работать как»</label>
-    <div><button type="submit" class="btn btn-secondary">Применить</button></div>
+    <div><button type="submit" class="btn btn-secondary">Применить</button> <a class="btn btn-secondary" href="{{ url_for('admin.audit') }}">Сбросить фильтры</a></div>
 </form>
-<div class="table-wrap" role="region" aria-label="Таблица" tabindex="0">
+{{ table_hint() }}
+<div class="table-wrap" role="region" aria-label="Журнал аудита" tabindex="0">
     <table class="data-table">
-        <thead><tr><th>Время</th><th>Пользователь</th><th>Роль</th><th>Действие</th><th>Объект</th><th>Изменения</th><th>IP</th></tr></thead>
+        <thead><tr><th scope="col">Время</th><th scope="col">Пользователь</th><th scope="col">Роль</th><th scope="col">Действие</th><th scope="col">Объект</th><th scope="col">Изменения</th><th scope="col">IP</th></tr></thead>
         <tbody>
         {% for e in page.items %}
         <tr>
@@ -61,16 +65,10 @@
             <td class="small nowrap">{{ e.ip or '' }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="muted">Записей нет.</td></tr>
+        <tr><td colspan="7" class="muted">{{ "Ничего не найдено." if page_filters else "Записей пока нет." }}</td></tr>
         {% endfor %}
         </tbody>
     </table>
 </div>
-{% if page.pages > 1 %}
-<nav class="pagination" aria-label="Страницы журнала">
-    {% if page.page > 1 %}<a class="btn btn-secondary" href="{{ page_url(page.page - 1) }}">Назад</a>{% endif %}
-    <span>Страница {{ page.page }} из {{ page.pages }}</span>
-    {% if page.page < page.pages %}<a class="btn btn-secondary" href="{{ page_url(page.page + 1) }}">Вперёд</a>{% endif %}
-</nav>
-{% endif %}
+{{ pagination(page, 'admin.audit', page_filters) }}
 {% endblock %}
