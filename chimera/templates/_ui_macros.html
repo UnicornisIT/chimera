@@ -1,9 +1,26 @@
-{% macro disclosure_chevron() -%}
-<span class="disclosure-chevron" aria-hidden="true">
-    <svg viewBox="0 0 24 24" focusable="false">
-        <path d="m7 10 5 5 5-5"></path>
-    </svg>
-</span>
+{% macro login_wordmark(name) -%}
+<h1 class="login-wordmark">
+    <img class="login-logo logo-light" src="{{ url_for('static', filename='images/chimera-logo.png') }}" width="1937" height="453" alt="{{ name }}">
+    <img class="login-logo logo-dark" src="{{ url_for('static', filename='images/chimera-logo-dark.png') }}" width="1937" height="453" alt="{{ name }}">
+</h1>
+{%- endmacro %}
+
+{% macro theme_toggle() -%}
+<button type="button" class="topbar-icon" aria-label="Изменить тему. Тема: системная" title="Тема: системная" data-theme-toggle hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="4"/></svg>
+</button>
+{%- endmacro %}
+
+{% macro flash_messages() -%}
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-messages">
+        {% for category, message in messages %}
+        <div class="flash-message {{ category }}" role="{{ 'alert' if category == 'error' else 'status' }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+{% endwith %}
 {%- endmacro %}
 
 {% macro badge(text, tone='neutral') -%}
@@ -16,15 +33,6 @@
 {%- if feature.badge -%}
 <span class="badge badge-{{ feature.badge_tone }}" title="В разработке">{{ feature.badge }}</span>
 {%- endif -%}
-{%- endmacro %}
-
-{% macro empty_state(title, description='', action_url='', action_label='') -%}
-<section class="empty-state" role="status">
-    <span class="empty-state-icon" aria-hidden="true">—</span>
-    <h2>{{ title }}</h2>
-    {% if description %}<p>{{ description }}</p>{% endif %}
-    {% if action_url and action_label %}<a class="btn" href="{{ action_url }}">{{ action_label }}</a>{% endif %}
-</section>
 {%- endmacro %}
 
 {% macro csrf_field() -%}

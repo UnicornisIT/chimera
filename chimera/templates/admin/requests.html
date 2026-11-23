@@ -5,7 +5,7 @@
 <div class="page-header">
     <div><h1>Заявки на доступ</h1><p>Саморегистрации в организации «{{ current_org.short_name }}».</p></div>
 </div>
-<div class="table-wrap">
+<div class="table-wrap" role="region" aria-label="Таблица" tabindex="0">
     <table class="data-table">
         <thead><tr><th>Подана</th><th>ФИО</th><th>Логин / почта</th><th>Комментарий</th><th>Решение</th></tr></thead>
         <tbody>
@@ -28,7 +28,7 @@
                 </form>
                 <form method="post" action="{{ url_for('admin.request_reject', request_id=r.id) }}" class="inline-form" data-confirm="Отклонить заявку {{ r.user.full_name }}?">
                     {{ csrf_field() }}
-                    <button type="submit" class="btn btn-secondary">Отклонить</button>
+                    <button type="submit" class="btn btn-secondary" data-confirm-submit disabled>Отклонить</button>
                 </form>
             </td>
         </tr>
