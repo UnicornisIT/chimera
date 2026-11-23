@@ -79,7 +79,8 @@ Blob ревизии `0001` до и после переноса идентиче�
 | Pytest PostgreSQL 16 на Windows | **PASS**, 290 прошли. |
 | Alembic CLI разработки из внешнего cwd | **PASS**. С явным `alembic.ini` выполнены `upgrade head`, `check` и `downgrade base` на одноразовой SQLite. |
 | Ruff check, Ruff format --check, mypy | **PASS**. |
-| Linux и Docker | **NOT TESTED** локально. WSL без дистрибутива, Docker CLI недоступен. CI-изменения проверяются в GitHub Actions после публикации ветки. |
+| Ubuntu | **PASS** в GitHub Actions. Установлены оба wheel, проверены SQLite и выделенный PostgreSQL 16. [Задание Ubuntu](https://github.com/UnicornisIT/chimera/actions/runs/45192771378/job/137755185047). |
+| Docker | **PASS** в GitHub Actions. Штатный запуск, импорт из site-packages и `migrate` из `/tmp` прошли. [Задание Docker](https://github.com/UnicornisIT/chimera/actions/runs/45192771378/job/137755183400). |
 | PyInstaller и Windows EXE | **NOT TESTED**. Для будущей сборки Alembic понадобятся физические файлы всего `chimera/migrations/`, включая Python-скрипты. |
 
 Установленные артефакты проверяются отдельно от pytest. Изолированный
@@ -87,10 +88,14 @@ Blob ревизии `0001` до и после переноса идентиче�
 записи Python bytecode из измерения. Снимок site-packages включает файлы
 и каталоги.
 
+Первый запуск Windows CI сравнил состав архивов, после чего остановился
+при записи кириллицы в поток `cp1252`. Для шага упаковки задан UTF-8.
+Итоговые прогоны доступны на [вкладке Checks PR #19](https://github.com/UnicornisIT/chimera/pull/19/checks).
+
 Итоговый статус 00-01 — **FIXED**. Локальная приёмка пройдена, ветка
-готова к публикации для проверки GitHub Actions. Новых P1, P2 и P3
-по проверенным сценариям не выявлено. Linux, Docker и PyInstaller
-остаются отдельными непроверенными сценариями.
+опубликована для независимого ревью. Открытых P1, P2 и P3
+по проверенным сценариям не выявлено. PyInstaller остаётся отдельным
+непроверенным сценарием.
 
 ## Ручная приёмка
 
