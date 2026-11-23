@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 
 from chimera.core import audit
-from chimera.core.context import NotFound, ServiceContext, ServiceError
+from chimera.core.context import FieldErrors, NotFound, ServiceContext, ServiceError
 from chimera.core.permissions import Permission, SystemPermission
 from chimera.core.terms import OrgType, StudentTerm
 from chimera.core.validation import clean_text, optional_text
@@ -28,24 +28,24 @@ class OrganizationData:
     is_active: bool = True
 
     def validated(self) -> dict[str, object]:
-        problems: list[str] = []
+        problems: dict[str, str] = {}
         name = clean_text(self.name, max_length=500)
         short_name = clean_text(self.short_name, max_length=150) or name[:150]
         if not name:
-            problems.append("Укажите полное название.")
+            problems["name"] = "Укажите полное название."
         try:
             org_type = OrgType(self.org_type)
         except ValueError:
-            problems.append("Выберите тип организации.")
+            problems["org_type"] = "Выберите тип организации."
             org_type = OrgType.COLLEGE
         student_term: StudentTerm | None = None
         if self.student_term:
             try:
                 student_term = StudentTerm(self.student_term)
             except ValueError:
-                problems.append("Неизвестный вариант термина «студент».")
+                problems["student_term"] = "Неизвестный вариант термина «студент»."
         if problems:
-            raise ServiceError(" ".join(problems))
+            raise FieldErrors(problems)
         return {
             "name": name,
             "short_name": short_name,
@@ -100,7 +100,9 @@ def update_organization(
     organization = get_organization(ctx, organization_id)
     values = data.validated()
     if organization.id == ctx.organization_id and not values["is_active"]:
-        raise ServiceError("Нельзя отключить организацию, в которой вы сейчас работаете.")
+        raise FieldErrors(
+            {"is_active": "Нельзя отключить организацию, в которой вы сейчас работаете."}
+        )
     before = audit.snapshot(organization)
     for key, value in values.items():
         setattr(organization, key, value)
@@ -162,29 +164,29 @@ class DivisionData:
 def _validate_division(
     ctx: ServiceContext, data: DivisionData, *, current: Division | None = None
 ) -> dict[str, object]:
-    problems: list[str] = []
+    problems: dict[str, str] = {}
     name = clean_text(data.name, max_length=300)
     if not name:
-        problems.append("Укажите название.")
+        problems["name"] = "Укажите название."
     try:
         kind = DivisionKind(data.kind)
     except ValueError:
-        problems.append("Неизвестный вид подразделения.")
+        problems["kind"] = "Неизвестный вид подразделения."
         kind = DivisionKind.DIVISION
     parent: Division | None = None
     if data.parent_id:
         try:
             parent = get_division(ctx, data.parent_id)
         except NotFound:
-            problems.append("Вышестоящее подразделение не найдено.")
+            problems["parent_id"] = "Вышестоящее подразделение не найдено."
     if kind is DivisionKind.DIVISION and parent is not None:
-        problems.append("Подразделение верхнего уровня не может быть вложенным.")
+        problems["parent_id"] = "Подразделение верхнего уровня не может быть вложенным."
     if parent is not None and parent.kind is not DivisionKind.DIVISION:
-        problems.append("Вложенные подразделения создаются только внутри верхнего уровня.")
+        problems["parent_id"] = "Вложенные подразделения создаются только внутри верхнего уровня."
     if current is not None and parent is not None and parent.id == current.id:
-        problems.append("Подразделение не может быть вложено само в себя.")
+        problems["parent_id"] = "Подразделение не может быть вложено само в себя."
     if current is not None and kind is not current.kind and current.children:
-        problems.append("Нельзя сменить вид подразделения, у которого есть вложенные.")
+        problems["kind"] = "Нельзя сменить вид подразделения, у которого есть вложенные."
     duplicate = ctx.session.scalar(
         select(Division.id).where(
             Division.name == name,
@@ -192,9 +194,9 @@ def _validate_division(
         )
     )
     if duplicate is not None and (current is None or duplicate != current.id):
-        problems.append("Подразделение с таким названием уже есть на этом уровне.")
+        problems["name"] = "Подразделение с таким названием уже есть на этом уровне."
     if problems:
-        raise ServiceError(" ".join(problems))
+        raise FieldErrors(problems)
     return {
         "name": name,
         "kind": kind,

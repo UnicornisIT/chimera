@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui_macros.html" import table_hint %}
 {% block title %}Профиль{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -20,9 +21,10 @@
 <section class="panel">
     <h2>Организации и роли</h2>
     {% if user.is_superadmin %}<p><span class="badge badge-info">Системный администратор</span> — доступ администратора во всех организациях.</p>{% endif %}
-    <div class="table-wrap" role="region" aria-label="Таблица" tabindex="0">
+    {{ table_hint() }}
+<div class="table-wrap" role="region" aria-label="Организации пользователя" tabindex="0">
         <table class="data-table">
-            <thead><tr><th>Организация</th><th>Роль</th><th>Подразделение</th></tr></thead>
+            <thead><tr><th scope="col">Организация</th><th scope="col">Роль</th><th scope="col">Подразделение</th></tr></thead>
             <tbody>
             {% for m in memberships %}
             <tr><td>{{ m.organization.short_name }}</td><td>{{ role_labels[m.role] }}</td><td>{{ m.division.name if m.division else '—' }}</td></tr>

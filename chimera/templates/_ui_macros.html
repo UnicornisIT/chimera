@@ -16,7 +16,7 @@
     {% if messages %}
     <div class="flash-messages">
         {% for category, message in messages %}
-        <div class="flash-message {{ category }}" role="{{ 'alert' if category == 'error' else 'status' }}">{{ message }}</div>
+        <div class="flash-message {{ category }}" role="{{ 'alert' if category in ('error', 'warning') else 'status' }}"{% if category == 'error' and loop.first %} tabindex="-1" data-error-focus{% endif %}>{{ message }}</div>
         {% endfor %}
     </div>
     {% endif %}
@@ -56,4 +56,41 @@
 {% for division in divisions %}
 <option value="{{ division.id }}"{% if selected == division.id %} selected{% endif %}>{% if division.parent_id %}— {% endif %}{{ division.name }}</option>
 {% endfor %}
+{%- endmacro %}
+
+{% macro field_attrs(name, errors, hint=None) -%}
+{% if errors.get(name) %}aria-invalid="true"{% endif %}
+{% if errors.get(name) or hint %} aria-describedby="{{ (hint ~ ' ' if hint else '') ~ name ~ '-error' if errors.get(name) else hint }}"{% endif %}
+{%- endmacro %}
+
+{% macro field_error(name, errors) -%}
+{% if errors.get(name) %}<span class="field-error" id="{{ name }}-error">{{ errors[name] }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro error_summary(errors) -%}
+{% if errors %}
+<div class="flash-message error" role="alert" tabindex="-1" data-error-focus autofocus>
+    <strong>Проверьте поля формы</strong>
+    <ul>{% for name, error in errors.items() %}<li><a href="#{{ name }}">{{ error }}</a></li>{% endfor %}</ul>
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro table_hint() -%}
+<p class="hint table-hint">На узком экране прокрутите таблицу вправо.</p>
+{%- endmacro %}
+
+{% macro confirm_button(label) -%}
+<button type="submit" class="btn btn-danger" name="confirmed" value="1" data-confirm-submit disabled>{{ label }}</button>
+<noscript><span class="hint">Для подтверждения действия включите JavaScript.</span></noscript>
+{%- endmacro %}
+
+{% macro pagination(page, endpoint, filters) -%}
+{% if page.pages > 1 %}
+<nav class="pagination" aria-label="Страницы результатов">
+    {% if page.page > 1 %}<a class="btn btn-secondary" href="{{ url_for(endpoint, page=page.page - 1, **filters) }}">Назад</a>{% endif %}
+    <span>Страница {{ page.page }} из {{ page.pages }}</span>
+    {% if page.page < page.pages %}<a class="btn btn-secondary" href="{{ url_for(endpoint, page=page.page + 1, **filters) }}">Вперёд</a>{% endif %}
+</nav>
+{% endif %}
 {%- endmacro %}

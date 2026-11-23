@@ -6,13 +6,21 @@ from typing import Any
 
 from flask import flash, redirect, render_template, request, url_for
 
-from chimera.core.context import ServiceError
+from chimera.core.context import FieldErrors, ServiceError
 from chimera.core.permissions import Permission, SystemPermission
 from chimera.core.terms import ORG_TYPE_LABELS, STUDENT_TERM_LABELS, OrgType
 from chimera.models import DivisionKind
 from chimera.services import organizations as org_service
 from chimera.web.admin import bp
-from chimera.web.context import ctx, db, form_bool, form_int, permission_required, system_required
+from chimera.web.context import (
+    ctx,
+    db,
+    form_bool,
+    form_int,
+    permission_required,
+    require_confirmation,
+    system_required,
+)
 
 
 def _organization_form() -> org_service.OrganizationData:
@@ -31,11 +39,12 @@ def _organization_form() -> org_service.OrganizationData:
     )
 
 
-def _render_org_form(organization: Any, *, creating: bool) -> str:
+def _render_org_form(organization: Any, *, creating: bool, errors: dict[str, str]) -> str:
     return render_template(
         "admin/organization_form.html",
         organization=organization,
         creating=creating,
+        errors=errors,
         org_types=ORG_TYPE_LABELS,
         student_terms=STUDENT_TERM_LABELS,
         form=request.form,
@@ -57,34 +66,42 @@ def organizations() -> Any:
 @bp.route("/organizations/new", methods=["GET", "POST"])
 @system_required(SystemPermission.ORGANIZATIONS_CREATE)
 def organization_new() -> Any:
+    errors: dict[str, str] = {}
     if request.method == "POST":
         try:
             organization = org_service.create_organization(ctx(), _organization_form())
         except ServiceError as exc:
             db().rollback()
-            flash(str(exc), "error")
+            if isinstance(exc, FieldErrors):
+                errors = exc.errors
+            else:
+                flash(str(exc), "error")
         else:
             db().commit()
             flash(f"Организация «{organization.short_name}» создана.", "success")
             return redirect(url_for("admin.organizations"))
-    return _render_org_form(None, creating=True)
+    return _render_org_form(None, creating=True, errors=errors)
 
 
 @bp.route("/organizations/<int:organization_id>", methods=["GET", "POST"])
 @permission_required(Permission.ORG_MANAGE)
 def organization_edit(organization_id: int) -> Any:
     organization = org_service.get_organization(ctx(), organization_id)
+    errors: dict[str, str] = {}
     if request.method == "POST":
         try:
             org_service.update_organization(ctx(), organization_id, _organization_form())
         except ServiceError as exc:
             db().rollback()
-            flash(str(exc), "error")
+            if isinstance(exc, FieldErrors):
+                errors = exc.errors
+            else:
+                flash(str(exc), "error")
         else:
             db().commit()
             flash("Реквизиты сохранены.", "success")
             return redirect(url_for("admin.organization_edit", organization_id=organization_id))
-    return _render_org_form(organization, creating=False)
+    return _render_org_form(organization, creating=False, errors=errors)
 
 
 def _division_form() -> org_service.DivisionData:
@@ -101,12 +118,16 @@ def _division_form() -> org_service.DivisionData:
 @permission_required(Permission.ORG_MANAGE)
 def divisions() -> Any:
     current = ctx()
+    errors: dict[str, str] = {}
     if request.method == "POST":
         try:
             org_service.create_division(current, _division_form())
         except ServiceError as exc:
             db().rollback()
-            flash(str(exc), "error")
+            if isinstance(exc, FieldErrors):
+                errors = exc.errors
+            else:
+                flash(str(exc), "error")
         else:
             db().commit()
             flash("Подразделение добавлено.", "success")
@@ -115,6 +136,9 @@ def divisions() -> Any:
     return render_template(
         "admin/divisions.html",
         tree=org_service.division_tree(current),
+        form=request.form,
+        errors=errors,
+        selected_parent=form_int("parent_id"),
         parents=[d for d in all_divisions if d.kind is DivisionKind.DIVISION],
         kinds=DivisionKind,
         is_university=current_org_type() is OrgType.UNIVERSITY,
@@ -133,12 +157,16 @@ def current_org_type() -> OrgType | None:
 def division_edit(division_id: int) -> Any:
     current = ctx()
     division = org_service.get_division(current, division_id)
+    errors: dict[str, str] = {}
     if request.method == "POST":
         try:
             org_service.update_division(current, division_id, _division_form())
         except ServiceError as exc:
             db().rollback()
-            flash(str(exc), "error")
+            if isinstance(exc, FieldErrors):
+                errors = exc.errors
+            else:
+                flash(str(exc), "error")
         else:
             db().commit()
             flash("Подразделение сохранено.", "success")
@@ -149,13 +177,20 @@ def division_edit(division_id: int) -> Any:
         if d.kind is DivisionKind.DIVISION and d.id != division.id
     ]
     return render_template(
-        "admin/division_form.html", division=division, parents=parents, kinds=DivisionKind
+        "admin/division_form.html",
+        division=division,
+        parents=parents,
+        kinds=DivisionKind,
+        form=request.form,
+        errors=errors,
+        selected_parent=form_int("parent_id"),
     )
 
 
 @bp.post("/divisions/<int:division_id>/delete")
 @permission_required(Permission.ORG_MANAGE)
 def division_delete(division_id: int) -> Any:
+    require_confirmation()
     try:
         org_service.delete_division(ctx(), division_id)
     except ServiceError as exc:

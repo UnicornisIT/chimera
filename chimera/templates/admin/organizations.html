@@ -1,13 +1,15 @@
 {% extends "base.html" %}
+{% from "_ui_macros.html" import table_hint %}
 {% block title %}Организации{% endblock %}
 {% block content %}
 <div class="page-header">
     <div><h1>Организации</h1><p>Реквизиты используются в шапках и подписях документов.</p></div>
     {% if can_create %}<div class="page-actions"><a class="btn" href="{{ url_for('admin.organization_new') }}">Добавить организацию</a></div>{% endif %}
 </div>
-<div class="table-wrap" role="region" aria-label="Таблица" tabindex="0">
+{{ table_hint() }}
+<div class="table-wrap" role="region" aria-label="Организации" tabindex="0">
     <table class="data-table">
-        <thead><tr><th>Краткое название</th><th>Полное название</th><th>Тип</th><th>Руководитель</th><th>Статус</th><th></th></tr></thead>
+        <thead><tr><th scope="col">Краткое название</th><th scope="col">Полное название</th><th scope="col">Тип</th><th scope="col">Руководитель</th><th scope="col">Статус</th><th scope="col">Действия</th></tr></thead>
         <tbody>
         {% for org in organizations %}
         <tr>
@@ -16,7 +18,7 @@
             <td>{{ org_types[org.org_type] }}</td>
             <td>{{ org.head_full_name or '—' }}{% if org.head_position %}<br><span class="muted small">{{ org.head_position }}</span>{% endif %}</td>
             <td>{% if org.is_active %}<span class="badge badge-success">активна</span>{% else %}<span class="badge">отключена</span>{% endif %}</td>
-            <td><a href="{{ url_for('admin.organization_edit', organization_id=org.id) }}">Изменить</a></td>
+            <td><a class="btn btn-secondary" href="{{ url_for('admin.organization_edit', organization_id=org.id) }}">Изменить</a></td>
         </tr>
         {% endfor %}
         </tbody>

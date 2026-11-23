@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_ui_macros.html" import csrf_field, role_options, division_options with context %}
+{% from "_ui_macros.html" import csrf_field, role_options, division_options, field_attrs, field_error, error_summary, confirm_button with context %}
 {% block title %}{{ membership.user.full_name }}{% endblock %}
 {% block content %}
 {% set u = membership.user %}
@@ -10,31 +10,32 @@
 <form method="post" class="panel">
     <h2>Данные и роль в организации</h2>
     {{ csrf_field() }}
+    {{ error_summary(errors) }}
     <div class="form-grid">
-        <div class="form-field"><label for="full_name">ФИО</label><input id="full_name" name="full_name" value="{{ u.full_name }}" {% if can_manage_account %}required{% else %}readonly{% endif %}></div>
-        <div class="form-field"><label for="email">Почта</label><input id="email" name="email" type="email" value="{{ u.email or '' }}"{% if not can_manage_account %} readonly{% endif %}></div>
+        <div class="form-field"><label for="full_name">ФИО</label><input {{ field_attrs("full_name", errors) }} id="full_name" name="full_name" value="{{ form.get("full_name", u.full_name) if can_manage_account else u.full_name }}" {% if can_manage_account %}required{% else %}readonly{% endif %}>{{ field_error("full_name", errors) }}</div>
+        <div class="form-field"><label for="email">Почта</label><input {{ field_attrs("email", errors) }} id="email" name="email" type="email" value="{{ form.get("email", u.email or "") if can_manage_account else u.email or "" }}"{% if not can_manage_account %} readonly{% endif %}>{{ field_error("email", errors) }}</div>
         <div class="form-field">
             <label for="role">Роль</label>
-            <select id="role" name="role" data-role-select>{{ role_options(roles, membership.role) }}</select>
-        </div>
+            <select {{ field_attrs("role", errors) }} id="role" name="role" data-role-select>{{ role_options(roles, form.get("role", membership.role)) }}</select>
+        {{ field_error("role", errors) }}</div>
         <div class="form-field" data-for-roles="head curator">
             <label for="division_id">{{ t.division }} / {{ t.department.lower }}</label>
-            <select id="division_id" name="division_id">{{ division_options(divisions, membership.division_id) }}</select>
-        </div>
+            <select {{ field_attrs("division_id", errors) }} id="division_id" name="division_id">{{ division_options(divisions, selected_division if request.method == "POST" else membership.division_id) }}</select>
+        {{ field_error("division_id", errors) }}</div>
         <div class="form-field">
-            <label class="form-check"><input type="checkbox" name="is_active" value="1"{% if membership.is_active %} checked{% endif %}> Доступ к организации включён</label>
-        </div>
+            <label class="form-check"><input {{ field_attrs("is_active", errors) }} type="checkbox" id="is_active" name="is_active" value="1"{% if (form.get("is_active") == "1" if request.method == "POST" else membership.is_active) %} checked{% endif %}> Доступ к организации включён</label>
+        {{ field_error("is_active", errors) }}</div>
     </div>
     <div class="form-actions"><button type="submit" class="btn">Сохранить</button></div>
 </form>
 {% if can_manage_account %}
-<form method="post" action="{{ url_for('admin.user_reset_password', membership_id=membership.id) }}" class="panel" data-confirm="Установить временный пароль? Текущий пароль перестанет действовать.">
+<form method="post" action="{{ url_for('admin.user_reset_password', membership_id=membership.id) }}" class="panel" data-confirm-title="Установить временный пароль?" data-confirm="Текущий пароль перестанет действовать. При следующем входе пользователю потребуется сменить временный пароль.">
     <h2>Временный пароль</h2>
     {{ csrf_field() }}
     <div class="form-grid">
         <div class="form-field"><label for="password">Новый временный пароль</label><input id="password" name="password" type="password" required autocomplete="new-password"></div>
     </div>
-    <div class="form-actions"><button type="submit" class="btn btn-secondary" data-confirm-submit disabled>Установить</button></div>
+    <div class="form-actions">{{ confirm_button('Установить') }}</div>
 </form>
 {% endif %}
 {% endblock %}

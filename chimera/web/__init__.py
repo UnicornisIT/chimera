@@ -138,6 +138,12 @@ def _register_request_hooks(app: Flask, settings: Settings) -> None:
         ):
             impersonation.record_action(ctx, request.method, request.endpoint, request.path)
             ctx.session.commit()
+        if request.method == "POST" and request.headers.get("X-Chimera-Form") == "1":
+            if response.status_code in {302, 303} and response.location:
+                response.headers["X-Chimera-Location"] = response.location
+                del response.headers["Location"]
+                response.status_code = 204
+            response.headers["X-Chimera-Form"] = "1"
         return response
 
     @app.teardown_request
@@ -213,7 +219,11 @@ def _register_error_handlers(app: Flask) -> None:
         }
         messages = {
             403: "У вас нет доступа к этому разделу или действию.",
-            500: "Не удалось выполнить запрос. Повторите попытку позже.",
+            408: "Время ожидания ответа истекло.",
+            502: "Не удалось связаться с приложением.",
+            503: "Приложение временно недоступно.",
+            504: "Приложение не ответило вовремя.",
+            500: "Не удалось выполнить запрос.",
         }
         # Для запроса без CSRF сохраняем подсказку об обновлении страницы.
         message = (
@@ -221,4 +231,9 @@ def _register_error_handlers(app: Flask) -> None:
             if exc.code == 400 and exc.description != type(exc).description
             else messages.get(exc.code, "")
         )
+        if request.method == "POST" and (exc.code == 408 or exc.code >= 500):
+            message = (
+                f"{message or 'Не удалось получить ответ.'} "
+                "Проверьте результат в нужном разделе перед повторным действием."
+            )
         return _render(exc.code, titles.get(exc.code, "Ошибка"), message or "")

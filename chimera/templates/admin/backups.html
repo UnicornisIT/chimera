@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "_ui_macros.html" import csrf_field with context %}
+{% from "_ui_macros.html" import table_hint %}
+{% from "_ui_macros.html" import csrf_field, confirm_button with context %}
 {% block title %}Резервные копии{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -18,9 +19,10 @@
        {% if schema.up_to_date %}<span class="badge badge-success">актуальна</span>{% else %}<span class="badge badge-warning">требуется {{ schema.head }}</span>{% endif %}</p>
     <p class="muted small">Каталог копий: {{ backup_dir }} · Хранятся {{ retention_days }} дн. (три последние — всегда).</p>
 </section>
-<div class="table-wrap" role="region" aria-label="Таблица" tabindex="0">
+{{ table_hint() }}
+<div class="table-wrap" role="region" aria-label="Резервные копии" tabindex="0">
     <table class="data-table">
-        <thead><tr><th>Файл</th><th>Создан</th><th>Размер</th><th></th></tr></thead>
+        <thead><tr><th scope="col">Файл</th><th scope="col">Создан</th><th scope="col">Размер</th><th scope="col">Действия</th></tr></thead>
         <tbody>
         {% for b in backups %}
         <tr>
@@ -31,8 +33,8 @@
                 <form method="get" action="{{ url_for('admin.backup_download', name=b.name) }}" class="inline-form">
                     <button type="submit" class="btn btn-secondary">Скачать</button>
                 </form>
-                <form method="post" action="{{ url_for('admin.backup_delete', name=b.name) }}" class="inline-form" data-confirm="Удалить копию {{ b.name }}?">
-                    {{ csrf_field() }}<button type="submit" class="btn btn-danger" data-confirm-submit disabled>Удалить</button>
+                <form method="post" action="{{ url_for('admin.backup_delete', name=b.name) }}" class="inline-form" data-confirm-title="Удалить резервную копию?" data-confirm="Копия «{{ b.name }}» будет удалена из хранилища. Восстановить её из списка будет невозможно.">
+                    {{ csrf_field() }}{{ confirm_button('Удалить') }}
                 </form>
             </td>
         </tr>

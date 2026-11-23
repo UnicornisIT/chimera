@@ -76,6 +76,12 @@ class TimestampMixin:
 def _configure_sqlite(engine: Engine, *, wal: bool) -> None:
     @event.listens_for(engine, "connect")
     def _on_connect(dbapi_connection: Any, _record: Any) -> None:
+        dbapi_connection.create_function(
+            "chimera_lower",
+            1,
+            lambda value: value.lower() if value is not None else None,
+            deterministic=True,
+        )
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute("PRAGMA foreign_keys=ON")

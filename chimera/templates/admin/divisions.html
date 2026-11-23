@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_ui_macros.html" import csrf_field with context %}
+{% from "_ui_macros.html" import csrf_field, field_attrs, field_error, error_summary, confirm_button with context %}
 {% block title %}{{ t.division.nom_pl }} и {{ t.department.nom_pl|lower }}{% endblock %}
 {% macro kind_label(kind) -%}{{ t.division if kind == kinds.DIVISION else t.department }}{%- endmacro %}
 {% macro render_nodes(nodes) %}
@@ -11,11 +11,11 @@
             <strong>{{ d.name }}</strong>{% if d.short_name %} <span class="muted">({{ d.short_name }})</span>{% endif %}
             <span class="badge">{{ kind_label(d.kind) }}</span>
             {% if not d.is_active %}<span class="badge badge-warning">не используется</span>{% endif %}
-            <a href="{{ url_for('admin.division_edit', division_id=d.id) }}">Изменить</a>
+            <a class="btn btn-secondary" href="{{ url_for('admin.division_edit', division_id=d.id) }}">Изменить</a>
             {% if not node.children %}
-            <form method="post" action="{{ url_for('admin.division_delete', division_id=d.id) }}" class="inline-form" data-confirm="Удалить «{{ d.name }}»?">
+            <form method="post" action="{{ url_for('admin.division_delete', division_id=d.id) }}" class="inline-form" data-confirm-title="Удалить подразделение?" data-confirm="Подразделение «{{ d.name }}» будет удалено из структуры организации.">
                 {{ csrf_field() }}
-                <button type="submit" class="btn btn-danger" data-confirm-submit disabled>Удалить</button>
+                {{ confirm_button('Удалить') }}
             </form>
             {% endif %}
         </div>
@@ -42,30 +42,31 @@
 <form method="post" class="panel">
     <h2>Добавить подразделение</h2>
     {{ csrf_field() }}
+    {{ error_summary(errors) }}
     <div class="form-grid">
         <div class="form-field">
             <label for="kind">Вид</label>
-            <select id="kind" name="kind">
-                <option value="{{ kinds.DIVISION.value }}">{{ t.division }}</option>
-                <option value="{{ kinds.DEPARTMENT.value }}">{{ t.department }}</option>
+            <select {{ field_attrs("kind", errors) }} id="kind" name="kind">
+                <option value="{{ kinds.DIVISION.value }}"{% if form.get("kind") == kinds.DIVISION.value %} selected{% endif %}>{{ t.division }}</option>
+                <option value="{{ kinds.DEPARTMENT.value }}"{% if form.get("kind") == kinds.DEPARTMENT.value %} selected{% endif %}>{{ t.department }}</option>
             </select>
-        </div>
+        {{ field_error("kind", errors) }}</div>
         <div class="form-field">
             <label for="parent_id">Входит в</label>
-            <select id="parent_id" name="parent_id">
+            <select {{ field_attrs("parent_id", errors, "parent_id-hint") }} id="parent_id" name="parent_id">
                 <option value="">— напрямую в {{ t.organization.lower }} —</option>
-                {% for p in parents %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+                {% for p in parents %}<option value="{{ p.id }}"{% if selected_parent == p.id %} selected{% endif %}>{{ p.name }}</option>{% endfor %}
             </select>
-            <span class="hint">Для {{ t.department.gen_pl }}: выберите {{ t.division.lower }} или оставьте пустым.</span>
-        </div>
+            <span class="hint" id="parent_id-hint">Для {{ t.department.gen_pl }}: выберите {{ t.division.lower }} или оставьте пустым.</span>
+        {{ field_error("parent_id", errors) }}</div>
         <div class="form-field">
             <label for="name">Название</label>
-            <input id="name" name="name" required maxlength="300">
-        </div>
+            <input {{ field_attrs("name", errors) }} id="name" name="name" value="{{ form.get('name', '') }}" required maxlength="300">
+        {{ field_error("name", errors) }}</div>
         <div class="form-field">
             <label for="short_name">Сокращение</label>
-            <input id="short_name" name="short_name" maxlength="100">
-        </div>
+            <input {{ field_attrs("short_name", errors) }} id="short_name" name="short_name" value="{{ form.get('short_name', '') }}" maxlength="100">
+        {{ field_error("short_name", errors) }}</div>
         <input type="hidden" name="is_active" value="1">
     </div>
     <div class="form-actions"><button type="submit" class="btn">Добавить</button></div>

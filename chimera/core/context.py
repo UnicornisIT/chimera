@@ -21,6 +21,14 @@ class ServiceError(ValueError):
     """Ошибка бизнес-правила; текст показывается пользователю."""
 
 
+class FieldErrors(ServiceError):
+    """Ошибки ввода с привязкой к именам полей формы."""
+
+    def __init__(self, errors: dict[str, str]) -> None:
+        self.errors = errors
+        super().__init__(" ".join(errors.values()))
+
+
 @dataclass(frozen=True, slots=True)
 class ServiceContext:
     session: Session

@@ -212,7 +212,7 @@ def test_organization_admin_cannot_change_protected_account(
     token = csrf(client, edit)
     assert (
         client.post(
-            edit + "/password", data={"csrf_token": token, "password": PASSWORD}
+            edit + "/password", data={"csrf_token": token, "password": PASSWORD, "confirmed": "1"}
         ).status_code
         == 403
     )
@@ -257,6 +257,30 @@ def test_audit_page_filters(client: FlaskClient, session: Session, world: World)
     result = audit_log.search(ctx, audit_log.AuditFilter(action="division"))
     assert result.total == 1
 
+    for number in range(51):
+        audit.record(ctx, "division.reviewed", message=f"Проверка {number:02d}")
+    other = world.ctx(session, world.university, Role.ADMIN)
+    audit.record(other, "division.reviewed", message="Проверка другой организации")
+    session.commit()
+    filters = {"q": "ПРОВЕРКА", "action": "division.reviewed"}
+    filtered = client.get("/admin/audit", query_string=filters).get_data(as_text=True)
+    assert "Страница 1 из 2" in filtered
+    assert "page=2" in filtered and "action=division.reviewed" in filtered
+    assert "другой организации" not in filtered
+    second = client.get("/admin/audit", query_string={**filters, "page": 2})
+    assert "Проверка 00" in second.get_data(as_text=True)
+    actors = client.get("/admin/audit", query_string={**filters, "actor": "COL.ADMIN"})
+    assert "Страница 1 из 2" in actors.get_data(as_text=True)
+    for parameters in (
+        {"q": "\0", "action": "\0", "user_id": "999999999999999999999", "page": "-1"},
+        {"page": "no", "limit": "-1", "from": "unknown", "to": "9999-12-31"},
+        {"actor": "uni.admin", "page": "999"},
+    ):
+        response = client.get("/admin/audit", query_string=parameters)
+        assert response.status_code == 200
+        assert "Проверка другой организации" not in response.get_data(as_text=True)
+    assert "Ничего не найдено." in response.get_data(as_text=True)
+
 
 def test_admin_pages_render(client: FlaskClient, session: Session, world: World) -> None:
     ctx = world.ctx(session, world.college, Role.ADMIN)
@@ -293,6 +317,138 @@ def test_division_routes(client: FlaskClient, database: Database, world: World) 
     )
     with database.transaction() as s:
         division = s.scalars(unscoped(select(Division))).one()
-    post(client, f"/admin/divisions/{division.id}/delete", csrf_from="/admin/divisions")
+    target = f"/admin/divisions/{division.id}/delete"
+    token = csrf(client, "/admin/divisions")
+    assert client.post(target, data={"csrf_token": token}).status_code == 400
+    assert client.post(target, data={"confirmed": "1"}).status_code == 400
+    with database.transaction() as s:
+        assert s.scalars(unscoped(select(Division))).one().id == division.id
+    assert client.get(target).status_code == 405
+    assert client.post(target, data={"csrf_token": token, "confirmed": "1"}).status_code == 302
     with database.transaction() as s:
         assert s.scalars(unscoped(select(Division))).all() == []
+
+
+def test_user_form_error_keeps_nonsecret_fields(client: FlaskClient, world: World) -> None:
+    login(client, "col.admin")
+    path = "/admin/users/new"
+    response = client.post(
+        path,
+        data={
+            "csrf_token": csrf(client, path),
+            "username": "synthetic.user",
+            "full_name": "Сотрудник",
+            "password": "secret",
+            "role": "head",
+        },
+        headers={"X-Chimera-Form": "1"},
+    )
+    html = response.get_data(as_text=True)
+    assert response.headers["X-Chimera-Form"] == "1"
+    assert 'value="synthetic.user"' in html
+    assert 'value="Сотрудник"' in html
+    assert 'value="head" selected' in html
+    assert 'aria-describedby="password-hint password-error"' in html
+    assert 'value="secret"' not in html
+
+
+def test_filtered_user_pagination_is_scoped(
+    client: FlaskClient, session: Session, world: World
+) -> None:
+    for organization, count in [(world.college, 51), (world.university, 1)]:
+        bind_organization(session, organization.organization.id)
+        for number in range(count):
+            user = User(
+                username=f"page.{organization.organization.id}.{number}",
+                full_name=f"Сотрудник {number:02d}",
+                email=f"page{number}@example.org",
+                password_hash=world.superadmin.password_hash,
+            )
+            session.add(user)
+            session.flush()
+            session.add(
+                Membership(
+                    organization_id=organization.organization.id, user_id=user.id, role=Role.CURATOR
+                )
+            )
+        session.flush()
+    session.commit()
+    ctx = world.ctx(session, world.college, Role.ADMIN)
+    members = users.search_members(ctx, query="СОТРУДНИК", role=Role.CURATOR, page=1)
+    assert members.total == 51
+    login(client, "col.admin")
+    first = client.get("/admin/users", query_string={"q": "СОТРУДНИК", "role": "curator"})
+    html = first.get_data(as_text=True)
+    assert "Страница 1 из 2" in html
+    assert "Сотрудник 49" in html and "Сотрудник 50" not in html
+    assert "page=2" in html and "role=curator" in html
+    second = client.get(
+        "/admin/users", query_string={"q": "сотрудник", "role": "curator", "page": 2}
+    ).get_data(as_text=True)
+    assert "Сотрудник 50" in second and "Сотрудник 49" not in second
+    assert "Ничего не найдено." in client.get("/admin/users?q=%25").get_data(as_text=True)
+    malformed = client.get(
+        "/admin/users",
+        query_string={"q": "сотрудник\0", "role": "unknown", "page": "x", "limit": 1},
+    )
+    assert malformed.status_code == 200
+    assert malformed.get_data(as_text=True).count("<tr>") == 51
+    last_page = {"q": "сотрудник", "role": "curator", "page": 999}
+    assert "Страница 2 из 2" in client.get("/admin/users", query_string=last_page).get_data(
+        as_text=True
+    )
+    extra = users.search_members(ctx, query="Сотрудник 50", role=Role.CURATOR, page=1).items[0]
+    session.delete(extra)
+    session.commit()
+    after_removal = client.get("/admin/users", query_string=last_page).get_data(as_text=True)
+    assert "Страница 2 из 2" not in after_removal
+    assert "Сотрудник 49" in after_removal
+
+
+def test_enhanced_post_preserves_csrf_and_redirect(client: FlaskClient, world: World) -> None:
+    login(client, "col.admin")
+    path = "/admin/divisions"
+    fields = {"name": "Учебное отделение", "kind": "division", "is_active": "1"}
+    headers = {"X-Chimera-Form": "1"}
+    denied = client.post(path, data=fields, headers=headers)
+    assert denied.status_code == 400
+    fields["csrf_token"] = csrf(client, path)
+    saved = client.post(path, data=fields, headers=headers)
+    assert saved.status_code == 204
+    assert saved.headers["X-Chimera-Location"] == path
+    assert "Подразделение добавлено." in client.get(path).get_data(as_text=True)
+
+
+def test_failed_user_edit_rolls_back_account_and_membership(
+    client: FlaskClient, session: Session, world: World
+) -> None:
+    context = world.ctx(session, world.college, Role.ADMIN)
+    member = next(m for m in users.list_members(context) if m.role is Role.CURATOR)
+    profile = member.user
+    original = profile.full_name, profile.email, member.role, member.division_id, member.is_active
+    path = f"/admin/users/{member.id}"
+    login(client, "col.admin")
+    response = client.post(
+        path,
+        data={
+            "csrf_token": csrf(client, path),
+            "role": "head",
+            "full_name": "Изменённое имя",
+            "email": "changed@example.org",
+            "division_id": "2147483647",
+        },
+    )
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert 'aria-describedby="division_id-error"' in html
+    assert 'value="Изменённое имя"' in html
+    assert 'value="changed@example.org"' in html
+    session.expire_all()
+    assert (
+        profile.full_name,
+        profile.email,
+        member.role,
+        member.division_id,
+        member.is_active,
+    ) == original
+    assert session.scalar(select(AuditLog.id).where(AuditLog.action == "user.updated")) is None

@@ -199,6 +199,15 @@ def system_required(permission: SystemPermission) -> Callable[[F], F]:
     return decorator
 
 
+def text_arg(name: str, max_length: int) -> str:
+    return request.args.get(name, "").replace("\0", "").strip()[:max_length]
+
+
+def require_confirmation() -> None:
+    if request.form.get("confirmed") != "1":
+        abort(400, description="Подтвердите действие на странице и повторите попытку.")
+
+
 def form_int(name: str) -> int | None:
     raw = request.form.get(name, "").strip()
     try:
