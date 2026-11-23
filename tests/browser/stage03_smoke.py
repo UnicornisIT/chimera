@@ -133,6 +133,87 @@ def check_sidebar_wordmark(page: Page) -> None:
     expect(logo).to_have_js_property("naturalWidth", 1937)
 
 
+def check_sidebar_focus(page: Page, base: str) -> None:
+    toggle = page.locator("[data-sidebar-toggle]")
+    drawer = page.locator(".main-nav")
+    first = drawer.locator(".nav-brand")
+    submenu = drawer.locator(".nav-dropdown-summary")
+    last = drawer.locator(".nav-dropdown-panel a").last
+    search = page.locator("#q")
+
+    for mobile_width, desktop_width in ((375, 1024), (768, 1440)):
+        page.set_viewport_size({"width": mobile_width, "height": 900})
+        open_route(page, base, "/admin/users")
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+        toggle.focus()
+        page.keyboard.press("Enter")
+        expect(first).to_be_focused()
+        page.keyboard.press("Shift+Tab")
+        expect(last).to_be_focused()
+        page.keyboard.press("Tab")
+        expect(first).to_be_focused()
+
+        submenu.focus()
+        page.keyboard.press("Enter")
+        expect(last).to_be_hidden()
+        page.keyboard.press("Tab")
+        expect(first).to_be_focused()
+        page.keyboard.press("Shift+Tab")
+        expect(submenu).to_be_focused()
+
+        search.focus()
+        expect(search).to_be_focused()
+        page.keyboard.press("Tab")
+        expect(first).to_be_focused()
+        search.focus()
+        page.keyboard.press("Escape")
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+        expect(toggle).to_be_focused()
+
+        page.keyboard.press("Enter")
+        expect(first).to_be_focused()
+        menu = page.locator(".user-menu summary")
+        menu.click()
+        expect(page.locator(".user-menu")).to_have_attribute("open", "")
+        page.keyboard.press("Escape")
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+        expect(toggle).to_be_focused()
+        page.keyboard.press("Escape")
+        expect(page.locator(".user-menu")).not_to_have_attribute("open", "")
+        expect(menu).to_be_focused()
+
+        toggle.focus()
+        page.keyboard.press("Enter")
+        expect(first).to_be_focused()
+        toggle.click()
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+        expect(toggle).to_be_focused()
+        page.keyboard.press("Enter")
+        expect(first).to_be_focused()
+
+        page.set_viewport_size({"width": desktop_width, "height": 900})
+        expect(page.locator("body")).not_to_have_class(re.compile(r"\bsidebar-open\b"))
+        expect(toggle).to_have_attribute("aria-expanded", "true")
+        expect(toggle).to_be_focused()
+        submenu.focus()
+        page.keyboard.press("Tab")
+        expect(toggle).to_be_focused()
+        page.keyboard.press("Enter")
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+        page.keyboard.press("Enter")
+        expect(toggle).to_have_attribute("aria-expanded", "true")
+
+        first.focus()
+        page.set_viewport_size({"width": mobile_width, "height": 900})
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+        expect(toggle).to_be_focused()
+        page.keyboard.press("Enter")
+        expect(first).to_be_focused()
+        page.keyboard.press("Escape")
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+        expect(toggle).to_be_focused()
+
+
 def check_keyboard_and_filters(page: Page, base: str) -> None:
     page.set_viewport_size({"width": 375, "height": 900})
     open_route(page, base, "/")
@@ -295,6 +376,7 @@ def main() -> None:
             for page in (public, private):
                 page.evaluate("(mode) => window.ChimeraTheme.set(mode)", mode)
                 check_contrast(page)
+            check_sidebar_focus(private, base)
             for width in WIDTHS:
                 for page in (public, private):
                     page.set_viewport_size({"width": width, "height": 900})

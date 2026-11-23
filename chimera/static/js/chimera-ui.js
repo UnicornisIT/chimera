@@ -7,14 +7,21 @@
 
   if (sidebarToggle) {
     const sidebar = document.querySelector('.main-nav');
+    const isMobileOpen = () => body.classList.contains('sidebar-open');
     const sync = () => {
       const expanded = mobile.matches
-        ? body.classList.contains('sidebar-open')
+        ? isMobileOpen()
         : !body.classList.contains('sidebar-collapsed');
       const label = expanded ? 'Свернуть боковую панель' : 'Развернуть боковую панель';
+      sidebar.inert = !expanded;
       sidebarToggle.setAttribute('aria-expanded', String(expanded));
       sidebarToggle.setAttribute('aria-label', label);
       sidebarToggle.title = label;
+    };
+    const setMobileOpen = (open) => {
+      body.classList.toggle('sidebar-open', open);
+      sync();
+      (open ? sidebar.querySelector('.nav-brand') : sidebarToggle).focus();
     };
     let collapsed = false;
     try { collapsed = sessionStorage.getItem('chimera-sidebar') === 'collapsed'; } catch (e) { /* приватный режим */ }
@@ -22,27 +29,47 @@
     sync();
     sidebarToggle.addEventListener('click', () => {
       if (mobile.matches) {
-        const opened = body.classList.toggle('sidebar-open');
-        if (opened) sidebar.querySelector('a').focus();
-      } else {
-        body.classList.toggle('sidebar-collapsed');
+        setMobileOpen(!isMobileOpen());
+        return;
       }
+      body.classList.toggle('sidebar-collapsed');
       sync();
       try {
         sessionStorage.setItem('chimera-sidebar', body.classList.contains('sidebar-collapsed') ? 'collapsed' : 'expanded');
       } catch (e) { /* приватный режим */ }
     });
     mobile.addEventListener('change', () => {
-      body.classList.remove('sidebar-open');
+      if (isMobileOpen()) {
+        setMobileOpen(false);
+        return;
+      }
+      const focusWasInSidebar = sidebar.contains(document.activeElement);
       sync();
+      if (mobile.matches && focusWasInSidebar) sidebarToggle.focus();
+    });
+    // При смене ширины браузер может сбросить фокус раньше события change.
+    sidebar.addEventListener('focusout', (event) => {
+      if (!event.relatedTarget && mobile.matches && !isMobileOpen()) sidebarToggle.focus();
     });
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && body.classList.contains('sidebar-open') &&
-          (sidebar.contains(event.target) || event.target === sidebarToggle)) {
-        body.classList.remove('sidebar-open');
-        sync();
-        sidebarToggle.focus();
+      if (!mobile.matches || !isMobileOpen()) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMobileOpen(false);
+        return;
       }
+      if (event.key !== 'Tab') return;
+
+      const items = [...sidebar.querySelectorAll('a[href], summary')].filter((item) => {
+        const closed = item.closest('details:not([open])');
+        return item.tabIndex >= 0 && (!closed || closed.firstElementChild === item)
+          && item.getClientRects().length > 0;
+      });
+      const index = items.indexOf(document.activeElement);
+      const edge = event.shiftKey ? 0 : items.length - 1;
+      if (index !== -1 && index !== edge) return;
+      event.preventDefault();
+      (event.shiftKey ? items.at(-1) : items[0])?.focus();
     });
   }
 
