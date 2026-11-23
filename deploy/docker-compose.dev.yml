@@ -1,7 +1,7 @@
-# PostgreSQL 16 для локальной разработки и прогона тестов:
+# PostgreSQL 16 для ручной локальной разработки:
 #   docker compose -f deploy/docker-compose.dev.yml up -d
 #   DATABASE_URL=postgresql+psycopg://chimera:chimera-dev@localhost:5433/chimera
-#   CHIMERA_TEST_DATABASE_URL=postgresql+psycopg://chimera:chimera-dev@localhost:5433/chimera_test
+# Для pytest используйте отдельный кластер: pytest --chimera-postgres.
 name: chimera-dev
 
 services:
@@ -15,7 +15,6 @@ services:
       - "127.0.0.1:5433:5432"
     volumes:
       - pgdata-dev:/var/lib/postgresql/data
-      - ./dev-init.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
 
 volumes:
   pgdata-dev:

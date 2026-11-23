@@ -11,9 +11,10 @@ from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from alembic.script.revision import ResolutionError
 from alembic.util.exc import CommandError
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine, inspect
 
-from chimera.core.config import PROJECT_ROOT
+from chimera.core.config import PROJECT_ROOT, ConfigError
+from chimera.core.db import Database
 
 MIGRATIONS_DIR = PROJECT_ROOT / "migrations"
 
@@ -31,8 +32,11 @@ def alembic_config(database_url: str, *, migrations_dir: Path = MIGRATIONS_DIR) 
     return config
 
 
-def upgrade_head(database_url: str) -> None:
-    command.upgrade(alembic_config(database_url), "head")
+def upgrade_head(database: Database) -> None:
+    config = alembic_config(database.url)
+    with database.engine.connect() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "head")
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,11 +53,19 @@ class SchemaState:
         return self.current is None
 
 
+def check_unversioned_schema(connection: Connection, current: str | None) -> None:
+    if current is None and set(inspect(connection).get_table_names()) - {"alembic_version"}:
+        raise ConfigError(
+            "В базе есть таблицы без ревизии Alembic. Укажите отдельную базу Chimera."
+        )
+
+
 def schema_state(engine: Engine, database_url: str) -> SchemaState:
     """Текущая и целевая ревизии. Неизвестная коду ревизия — `SchemaTooNewError`."""
     script = ScriptDirectory.from_config(alembic_config(database_url))
     with engine.connect() as connection:
         current = MigrationContext.configure(connection).get_current_revision()
+        check_unversioned_schema(connection, current)
     if current is not None:
         try:
             known = script.get_revision(current) is not None
@@ -61,7 +73,7 @@ def schema_state(engine: Engine, database_url: str) -> SchemaState:
             known = False
         if not known:
             raise SchemaTooNewError(
-                f"Схема базы ({current}) создана более новой версией Chimera. Обновите "
+                "Ревизия схемы базы неизвестна этой версии Chimera. Обновите "
                 "приложение или восстановите резервную копию, совместимую с этой версией."
             )
     return SchemaState(current, script.get_current_head())

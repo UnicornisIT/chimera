@@ -15,6 +15,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sess
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.types import TypeDecorator
 
+from chimera.core.config import POSTGRES_MAJOR, ConfigError, Settings, validate_settings
+
 # Явные имена ограничений нужны Alembic для batch-миграций SQLite.
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -93,13 +95,18 @@ def _configure_sqlite(engine: Engine, *, wal: bool) -> None:
             cursor.close()
 
 
-def make_engine(database_url: str, *, echo: bool = False) -> Engine:
+def make_engine(
+    database_url: str, *, echo: bool = False, test_postgres_dir: Path | None = None
+) -> Engine:
     url = make_url(database_url)
     if url.get_backend_name() == "sqlite":
         database = url.database or ""
         in_memory = database in {"", ":memory:"}
         if not in_memory:
-            Path(database).parent.mkdir(parents=True, exist_ok=True)
+            try:
+                Path(database).parent.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                raise ConfigError("DATABASE_URL: не удалось подготовить каталог SQLite") from None
         engine = create_engine(
             url,
             echo=echo,
@@ -108,16 +115,66 @@ def make_engine(database_url: str, *, echo: bool = False) -> Engine:
         )
         _configure_sqlite(engine, wal=not in_memory)
         return engine
-    return create_engine(url, echo=echo, pool_pre_ping=True)
+    engine = create_engine(url, echo=echo, pool_pre_ping=True, hide_parameters=True)
+    if url.drivername == "postgresql+psycopg":
+
+        @event.listens_for(engine, "do_connect")
+        def _connect(
+            _dialect: Dialect, _record: Any, args: list[Any], kwargs: dict[str, Any]
+        ) -> Any:
+            import psycopg
+
+            connection: psycopg.Connection[Any] | None = None
+            try:
+                if test_postgres_dir is not None:
+                    kwargs["hostaddr"] = url.host
+                connection = psycopg.connect(*args, **kwargs)
+                if connection.info.server_version // 10000 != POSTGRES_MAJOR:
+                    raise ConfigError(f"Требуется PostgreSQL {POSTGRES_MAJOR}")
+                if test_postgres_dir is not None:
+                    # Проверяем каждое физическое подключение до передачи его ORM/Alembic.
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT current_setting('data_directory'), current_database(), "
+                            "session_user, host(inet_server_addr()), inet_server_port()"
+                        )
+                        row = cursor.fetchone()
+                    if (
+                        row is None
+                        or Path(row[0]).resolve() != test_postgres_dir.resolve()
+                        or tuple(row[1:]) != (url.database, url.username, url.host, url.port)
+                    ):
+                        raise ConfigError("Подключение ведёт за пределы тестового кластера")
+                    connection.rollback()
+                return connection
+            except (OSError, psycopg.Error):
+                if connection is not None:
+                    connection.close()
+                raise ConfigError(
+                    "Не удалось подключиться к PostgreSQL или проверить подключение"
+                ) from None
+            except ConfigError:
+                if connection is not None:
+                    connection.close()
+                raise
+
+    return engine
 
 
 class Database:
     """Держит движок и фабрику сессий одного приложения."""
 
-    def __init__(self, database_url: str, *, echo: bool = False) -> None:
+    def __init__(
+        self, database_url: str, *, echo: bool = False, test_postgres_dir: Path | None = None
+    ) -> None:
         self.url = database_url
-        self.engine = make_engine(database_url, echo=echo)
+        self.engine = make_engine(database_url, echo=echo, test_postgres_dir=test_postgres_dir)
         self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> Database:
+        settings = validate_settings(settings, require_secrets=False)
+        return cls(settings.database_url, test_postgres_dir=settings.test_postgres_dir)
 
     @property
     def dialect(self) -> str:

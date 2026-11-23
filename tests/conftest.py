@@ -1,8 +1,7 @@
 """Общие фикстуры: база (SQLite или PostgreSQL), приложение и синтетические данные.
 
-База выбирается переменной `CHIMERA_TEST_DATABASE_URL`; по умолчанию — временный
-файл SQLite. Схема создаётся миграциями Alembic один раз на сессию, между тестами
-таблицы очищаются.
+SQLite создаётся во временном каталоге pytest. Для PostgreSQL опция
+--chimera-postgres поднимает собственный кластер на время сессии.
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ from cryptography.fernet import Fernet
 from faker import Faker
 from flask import Flask
 from flask.testing import FlaskClient
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from chimera.core import crypto
@@ -32,6 +30,7 @@ from chimera.core.tenancy import bind_organization
 from chimera.core.terms import OrgType
 from chimera.models import Membership, Organization, User
 from chimera.web import create_app
+from scripts import dev_test_env as stand
 
 PASSWORD = "Test-pass-123"
 # Хэш считается один раз: генерация werkzeug намеренно медленная.
@@ -39,11 +38,19 @@ PASSWORD_HASH = hash_password(PASSWORD)
 TEST_KEY = Fernet.generate_key().decode()
 
 
-def _database_url(tmp_root: Path) -> str:
-    url = os.environ.get("CHIMERA_TEST_DATABASE_URL")
-    if url:
-        return url
-    return f"sqlite:///{(tmp_root / 'chimera-test.db').as_posix()}"
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--chimera-postgres",
+        action="store_true",
+        help="создать выделенный временный кластер PostgreSQL 16 для pytest",
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    if "CHIMERA_TEST_DATABASE_URL" in os.environ:
+        raise pytest.UsageError(
+            "Удалите CHIMERA_TEST_DATABASE_URL. Для PostgreSQL используйте --chimera-postgres."
+        )
 
 
 @pytest.fixture(scope="session")
@@ -52,34 +59,45 @@ def tmp_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture(scope="session")
-def settings(tmp_root: Path) -> Settings:
-    return load_settings(
-        {
-            "CHIMERA_TESTING": "1",
-            "DATABASE_URL": _database_url(tmp_root),
-            "SECRET_KEY": "test-secret-key-" + "x" * 32,
-            "DATA_ENCRYPTION_KEY": TEST_KEY,
-            "CHIMERA_DATA_DIR": str(tmp_root / "data"),
-            "SESSION_COOKIE_SECURE": "0",
-            "LOGIN_MAX_ATTEMPTS": "3",
-        }
-    )
+def settings(tmp_root: Path, pytestconfig: pytest.Config) -> Iterator[Settings]:
+    env = {
+        "CHIMERA_MODE": "desktop-local",
+        "SECRET_KEY": "test-secret-key-" + "x" * 32,
+        "DATA_ENCRYPTION_KEY": TEST_KEY,
+        "CHIMERA_DATA_DIR": str(tmp_root / "data"),
+        "LOGIN_MAX_ATTEMPTS": "3",
+    }
+    if not pytestconfig.getoption("--chimera-postgres"):
+        yield load_settings(env, testing=True)
+        return
 
-
-def _drop_everything(database: Database) -> None:
-    with database.engine.begin() as conn:
-        Base.metadata.drop_all(conn)
-        conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+    port = 55439
+    with stand.locked_stand("postgres", create=True, root=tmp_root / "python-test-env") as path:
+        try:
+            stand.start_postgres(path, port=port)
+            stand_settings = stand.settings_for(path, "postgres", prepare=True, port=port)
+            yield load_settings(
+                {
+                    **env,
+                    "CHIMERA_MODE": "server",
+                    "DATABASE_URL": stand_settings.database_url,
+                },
+                testing=True,
+                test_postgres_dir=stand_settings.test_postgres_dir,
+            )
+        finally:
+            stand.stop_postgres(path, port=port)
 
 
 @pytest.fixture(scope="session")
 def database(settings: Settings) -> Iterator[Database]:
-    db = Database(settings.database_url)
-    _drop_everything(db)
-    upgrade_head(settings.database_url)
-    crypto.configure(TEST_KEY)
-    yield db
-    db.dispose()
+    db = Database.from_settings(settings)
+    try:
+        upgrade_head(db)
+        crypto.configure(TEST_KEY)
+        yield db
+    finally:
+        db.dispose()
 
 
 @pytest.fixture(autouse=True)
@@ -102,10 +120,12 @@ def session(database: Database) -> Iterator[Session]:
 
 
 @pytest.fixture
-def app(settings: Settings, database: Database) -> Flask:
+def app(settings: Settings, database: Database) -> Iterator[Flask]:
     application = create_app(settings)
-    application.config["TESTING"] = True
-    return application
+    try:
+        yield application
+    finally:
+        application.extensions["chimera.db"].dispose()
 
 
 @pytest.fixture

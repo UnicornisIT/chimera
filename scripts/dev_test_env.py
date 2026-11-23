@@ -19,18 +19,25 @@ from cryptography.fernet import Fernet
 from psycopg import sql
 from sqlalchemy.exc import SQLAlchemyError
 
-from chimera.core.config import PROJECT_ROOT, Settings, load_settings
+from chimera.core.config import (
+    LOOPBACK,
+    PROJECT_ROOT,
+    TEST_POSTGRES_NAME,
+    TEST_STAND_MARKER,
+    ConfigError,
+    Settings,
+    load_settings,
+)
 from chimera.core.db import Database
 from chimera.core.migrations import schema_state, upgrade_head
 from chimera.web import create_app
 from scripts.dev_test_fixtures import COLLEGE, seed
 
 STATE_ROOT = PROJECT_ROOT / ".chimera-test-envs"
-MARKER = ".stage-02"
-LOOPBACK = "127.0.0.1"
+MARKER = TEST_STAND_MARKER
 PG_PORT = 55432
-PG_ROLE = "chimera_stage02"
-PG_DATABASE = "chimera_stage02"
+PG_ROLE = TEST_POSTGRES_NAME
+PG_DATABASE = TEST_POSTGRES_NAME
 
 
 class StandError(RuntimeError):
@@ -68,19 +75,20 @@ def check_tree(path: Path) -> None:
 
 
 @contextmanager
-def locked_stand(backend: str, *, create: bool = False) -> Iterator[Path]:
+def locked_stand(backend: str, *, create: bool = False, root: Path | None = None) -> Iterator[Path]:
     if backend not in {"sqlite", "postgres"}:
         raise StandError("Ожидалось имя тестового стенда sqlite или postgres.")
+    root = STATE_ROOT if root is None else root
     if create:
-        STATE_ROOT.mkdir(mode=0o700, exist_ok=True)
-    info = file_info(STATE_ROOT)
+        root.mkdir(mode=0o700, exist_ok=True)
+    info = file_info(root)
     if not stat.S_ISDIR(info.st_mode):
         raise StandError("Ожидался отдельный каталог тестовых стендов.")
     if sys.platform != "win32" and (info.st_uid != os.getuid() or info.st_mode & 0o022):
         raise StandError("Корневой каталог стендов должен принадлежать текущему пользователю.")
-    check_mounts(STATE_ROOT)
-    path = STATE_ROOT / backend
-    lock = STATE_ROOT / f"{backend}.lock"
+    check_mounts(root)
+    path = root / backend
+    lock = root / f"{backend}.lock"
     try:
         lock.mkdir(mode=0o700)
     except FileExistsError:
@@ -157,13 +165,14 @@ def pg_state(path: Path) -> bool:
     return pg_tool("pg_ctl", "status", "-D", str(path / "pgdata"), allowed=(0, 3)).returncode == 0
 
 
-def pg_connection(path: Path, *, create_database: bool = False) -> int:
+def pg_connection(path: Path, *, create_database: bool = False, port: int | None = None) -> int:
     password = (path / "postgres.key").read_text(encoding="ascii").strip()
     if not re.fullmatch(r"[0-9a-f]{64}", password):
         raise StandError("Ключ выделенного кластера имеет неверный формат.")
     with psycopg.connect(
         host=LOOPBACK,
-        port=PG_PORT,
+        hostaddr=LOOPBACK,
+        port=PG_PORT if port is None else port,
         user=PG_ROLE,
         password=password,
         dbname="postgres",
@@ -186,7 +195,8 @@ def pg_connection(path: Path, *, create_database: bool = False) -> int:
         return int(row[1])
 
 
-def start_postgres(path: Path) -> None:
+def start_postgres(path: Path, *, port: int | None = None) -> None:
+    port = PG_PORT if port is None else port
     data = path / "pgdata"
     if not data.exists():
         check_pg_tool("initdb")
@@ -201,6 +211,7 @@ def start_postgres(path: Path) -> None:
             "--auth=scram-sha-256",
             "--encoding=UTF8",
             "--no-locale",
+            "--no-sync",  # Синтетический кластер можно пересоздать после сбоя.
             f"--pwfile={path / 'postgres.key'}",
         )
     if not pg_state(path):
@@ -216,29 +227,30 @@ def start_postgres(path: Path) -> None:
             "-t",
             "30",
             "-o",
-            f"-h {LOOPBACK} -p {PG_PORT} -c unix_socket_directories=",
+            f"-h {LOOPBACK} -p {port} -c unix_socket_directories=",
             capture=False,
         )
 
 
-def stop_postgres(path: Path) -> None:
+def stop_postgres(path: Path, *, port: int | None = None) -> None:
     data = path / "pgdata"
     if not data.exists():
         return
     if not (data / "PG_VERSION").exists() and not (data / "postmaster.pid").exists():
         return  # прерванный initdb до создания кластера
     if pg_state(path):
-        pg_connection(path)
+        pg_connection(path, port=port)
         pg_tool("pg_ctl", "stop", "-D", str(data), "-m", "fast", "-w", "-t", "30")
 
 
-def settings_for(path: Path, backend: str, *, prepare: bool) -> Settings:
+def settings_for(path: Path, backend: str, *, prepare: bool, port: int | None = None) -> Settings:
+    port = PG_PORT if port is None else port
     postgres = backend == "postgres"
     if postgres:
-        version = pg_connection(path, create_database=prepare)
+        version = pg_connection(path, create_database=prepare, port=port)
         print(f"PostgreSQL {version // 10000}.{version % 10000}")
         key = (path / "postgres.key").read_text(encoding="ascii").strip()
-        url = f"postgresql+psycopg://{PG_ROLE}:{key}@{LOOPBACK}:{PG_PORT}/{PG_DATABASE}"
+        url = f"postgresql+psycopg://{PG_ROLE}:{key}@{LOOPBACK}:{port}/{PG_DATABASE}"
     else:
         db_file = path / "chimera.db"
         if "?" in db_file.as_posix():
@@ -263,18 +275,23 @@ def settings_for(path: Path, backend: str, *, prepare: bool) -> Settings:
         env["DATA_ENCRYPTION_KEY"] = persistent_value(
             path / "data_encryption.key", Fernet.generate_key().decode("ascii")
         )
-    return load_settings(env, require_secrets=prepare)
+    return load_settings(
+        env,
+        require_secrets=prepare,
+        testing=postgres,
+        test_postgres_dir=path / "pgdata" if postgres else None,
+    )
 
 
 def prepare_or_status(path: Path, backend: str, *, prepare: bool) -> Settings:
     if prepare and backend == "postgres":
         start_postgres(path)
     settings = settings_for(path, backend, prepare=prepare)
-    database = Database(settings.database_url)
+    database = Database.from_settings(settings)
     try:
         state = schema_state(database.engine, database.url)
         if prepare:
-            upgrade_head(database.url)
+            upgrade_head(database)
             with database.transaction() as session:
                 seed(session, settings)
             state = schema_state(database.engine, database.url)
@@ -332,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
                     create_app(settings).run(
                         host=LOOPBACK, port=settings.port, debug=False, load_dotenv=False
                     )
-    except StandError as exc:
+    except (ConfigError, StandError) as exc:
         print(exc, file=sys.stderr)
         return 1
     except FileNotFoundError:

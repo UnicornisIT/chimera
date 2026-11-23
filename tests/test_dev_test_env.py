@@ -52,7 +52,7 @@ def test_prepare_preserves_accounts_and_passwords(
         changed_password = secrets.token_hex(24) + "!"
         assert settings.host == "127.0.0.1"
         assert settings.is_sqlite == (backend == "sqlite")
-        database = Database(settings.database_url)
+        database = Database.from_settings(settings)
         try:
             with database.transaction() as session:
                 users = list(session.scalars(select(User).order_by(User.username)))
@@ -113,7 +113,7 @@ def test_prepare_preserves_accounts_and_passwords(
         assert reloaded.secret_key == settings.secret_key
         assert reloaded.data_encryption_key == settings.data_encryption_key
         assert reloaded.admin_default_password == initial_password
-        database = Database(reloaded.database_url)
+        database = Database.from_settings(reloaded)
         try:
             with database.transaction() as session:
                 users = list(session.scalars(select(User).order_by(User.username)))

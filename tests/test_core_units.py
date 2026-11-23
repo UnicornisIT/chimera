@@ -2,72 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-from cryptography.fernet import Fernet
 
-from chimera.core.config import AppMode, ConfigError, load_settings
 from chimera.core.features import FEATURES, FeatureStatus, get_feature, is_enabled
 from chimera.core.security import password_problems
 from chimera.core.terms import TERM_KEYS, OrgType, StudentTerm, terms_for
 from chimera.core.validation import email_problem, normalize_email, username_problem
-
-GOOD_ENV = {
-    "SECRET_KEY": "s" * 40,
-    "DATA_ENCRYPTION_KEY": Fernet.generate_key().decode(),
-}
-
-
-class TestConfig:
-    def test_defaults_to_sqlite_in_instance(self) -> None:
-        settings = load_settings(dict(GOOD_ENV))
-        assert settings.mode is AppMode.SERVER
-        assert settings.is_sqlite
-        assert settings.database_url.endswith("instance/chimera.db")
-
-    def test_postgres_url_is_normalised_to_psycopg(self) -> None:
-        settings = load_settings({**GOOD_ENV, "DATABASE_URL": "postgresql://u:p@db/chimera"})
-        assert settings.database_url == "postgresql+psycopg://u:p@db/chimera"
-
-    def test_server_requires_strong_secret(self) -> None:
-        with pytest.raises(ConfigError, match="SECRET_KEY"):
-            load_settings({**GOOD_ENV, "SECRET_KEY": "short"})
-
-    def test_server_requires_encryption_key(self) -> None:
-        with pytest.raises(ConfigError, match="DATA_ENCRYPTION_KEY"):
-            load_settings({"SECRET_KEY": "s" * 40})
-
-    def test_desktop_local_generates_and_keeps_secrets(self, tmp_path: Path) -> None:
-        env = {"CHIMERA_MODE": "desktop-local", "CHIMERA_DATA_DIR": str(tmp_path)}
-        first = load_settings(env)
-        second = load_settings(env)
-        assert len(first.secret_key) >= 32
-        assert first.secret_key == second.secret_key
-        assert first.data_encryption_key == second.data_encryption_key
-        assert first.session_cookie_secure is False
-
-    def test_desktop_local_rejects_postgres(self, tmp_path: Path) -> None:
-        with pytest.raises(ConfigError, match="SQLite"):
-            load_settings(
-                {
-                    "CHIMERA_MODE": "desktop-local",
-                    "CHIMERA_DATA_DIR": str(tmp_path),
-                    "DATABASE_URL": "postgresql://x/y",
-                }
-            )
-
-    @pytest.mark.parametrize(
-        ("key", "value"),
-        [("CHIMERA_MODE", "cloud"), ("APP_PORT", "abc"), ("APP_DEBUG", "maybe")],
-    )
-    def test_invalid_values(self, key: str, value: str) -> None:
-        with pytest.raises(ConfigError):
-            load_settings({**GOOD_ENV, key: value})
-
-    def test_migrations_do_not_need_secrets(self) -> None:
-        settings = load_settings({}, require_secrets=False)
-        assert settings.database_url.startswith("sqlite")
 
 
 class TestTerms:

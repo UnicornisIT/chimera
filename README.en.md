@@ -56,18 +56,28 @@ compatible accounts, so both can later share a single launcher.
 CPython 3.11 is required.
 
 ```bash
-cp .env.example .env   # set SECRET_KEY, DATA_ENCRYPTION_KEY, POSTGRES_PASSWORD, ADMIN_DEFAULT_PASSWORD
+cp .env.example .env   # set DATABASE_URL with host db, SECRET_KEY,
+                       # DATA_ENCRYPTION_KEY, POSTGRES_PASSWORD and ADMIN_DEFAULT_PASSWORD
 docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
 ```
 
-For a local run from source:
+Server requires PostgreSQL 16 and a trusted HTTPS reverse proxy. The Compose
+nginx endpoint exposes loopback HTTP for health checks by default. See the
+[deployment guide](docs/deployment.md) for the proxy and secret configuration.
+
+For Desktop Local from source:
 
 ```bash
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
+cp .env.example .env   # set CHIMERA_MODE=desktop-local and leave DATABASE_URL empty
 .venv/bin/python -m chimera migrate
 .venv/bin/python -m chimera run
 ```
+
+Desktop Local uses SQLite and serves HTTP on `127.0.0.1`. A new Windows profile
+uses `%LOCALAPPDATA%/Chimera`. Set `CHIMERA_DATA_DIR` to keep using an existing
+profile. Changing modes does not transfer or sync data.
 
 The documentation in [`docs/`](docs/) is written in Russian.
 
