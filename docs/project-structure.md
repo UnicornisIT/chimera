@@ -44,7 +44,7 @@ chimera/
     css/                tokens.css, legacy.css, modern.css (из Manticore), chimera.css
     js/                 theme.js, chimera-ui.js, user-menu.js
     images/             логотип
-migrations/             Alembic (env.py, versions/)
+chimera/migrations/     Alembic (env.py, versions/)
 deploy/                 Dockerfile, docker-compose, nginx, systemd, шрифты
 tests/                  pytest; фикстуры с Faker ru_RU
 scripts/                служебные проверки (check_forbidden_files.py)

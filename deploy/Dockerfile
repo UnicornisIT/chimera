@@ -48,9 +48,10 @@ RUN python -m pip install --no-deps . \
  && chmod +x deploy/docker-entrypoint.sh
 
 USER chimera
+WORKDIR /home/chimera
 EXPOSE 8000
 VOLUME ["/var/lib/chimera"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/login', timeout=4)"]
-ENTRYPOINT ["deploy/docker-entrypoint.sh"]
-CMD ["gunicorn", "--config", "deploy/gunicorn.conf.py", "chimera.wsgi:app"]
+ENTRYPOINT ["/app/deploy/docker-entrypoint.sh"]
+CMD ["gunicorn", "--config", "/app/deploy/gunicorn.conf.py", "chimera.wsgi:app"]

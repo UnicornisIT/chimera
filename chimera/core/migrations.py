@@ -13,10 +13,11 @@ from alembic.script.revision import ResolutionError
 from alembic.util.exc import CommandError
 from sqlalchemy import Connection, Engine, inspect
 
-from chimera.core.config import PROJECT_ROOT, ConfigError
+from chimera.core.config import ConfigError
 from chimera.core.db import Database
 
-MIGRATIONS_DIR = PROJECT_ROOT / "migrations"
+MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "migrations"
+_REQUIRED_RESOURCES = ("env.py", "script.py.mako", "versions/20261025_0001_initial_schema.py")
 
 
 class SchemaTooNewError(RuntimeError):
@@ -24,9 +25,11 @@ class SchemaTooNewError(RuntimeError):
 
 
 def alembic_config(database_url: str, *, migrations_dir: Path = MIGRATIONS_DIR) -> Config:
+    if any(not (migrations_dir / resource).is_file() for resource in _REQUIRED_RESOURCES):
+        raise ConfigError("В установке Chimera отсутствуют ресурсы миграций Alembic.")
     config = Config()
-    config.set_main_option("script_location", str(migrations_dir))
     # ConfigParser интерпретирует «%», поэтому экранируем (пароли в URL).
+    config.set_main_option("script_location", str(migrations_dir.resolve()).replace("%", "%%"))
     config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
     config.attributes["chimera_database_url"] = database_url
     return config
