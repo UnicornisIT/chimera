@@ -8,7 +8,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import joinedload
 
 from chimera.core import audit
-from chimera.core.context import NotFound, ServiceContext, ServiceError
+from chimera.core.context import NotFound, PermissionDenied, ServiceContext, ServiceError
 from chimera.core.db import utcnow
 from chimera.core.permissions import Permission, Role
 from chimera.core.security import hash_password, password_problems
@@ -165,6 +165,21 @@ class MembershipData:
     email: str | None
 
 
+def can_manage_account(ctx: ServiceContext, membership: Membership) -> bool:
+    if ctx.is_superadmin and not ctx.is_acting:
+        return True
+    # Пароль и контактные данные общие для всех членств, включая отключённые.
+    if membership.user.is_superadmin:
+        return False
+    other_membership = unscoped(
+        select(Membership.id).where(
+            Membership.user_id == membership.user_id,
+            Membership.organization_id != membership.organization_id,
+        )
+    )
+    return ctx.session.scalar(other_membership.limit(1)) is None
+
+
 def update_member(ctx: ServiceContext, membership_id: int, data: MembershipData) -> Membership:
     membership = get_membership(ctx, membership_id)
     role = _parse_role(data.role)
@@ -180,12 +195,15 @@ def update_member(ctx: ServiceContext, membership_id: int, data: MembershipData)
     if (problem := email_problem(email)) is not None:
         raise ServiceError(problem)
 
-    user_before = audit.snapshot(user)
-    user.full_name = full_name
-    user.email = email
-    user_changes = audit.diff(user_before, audit.snapshot(user))
-    if user_changes:
-        audit.record(ctx, "user.updated", entity=user, changes=user_changes)
+    if (full_name, email) != (user.full_name, user.email):
+        if not can_manage_account(ctx, membership):
+            raise PermissionDenied("Изменение общих данных учётной записи недоступно.")
+        user_before = audit.snapshot(user)
+        user.full_name = full_name
+        user.email = email
+        audit.record(
+            ctx, "user.updated", entity=user, changes=audit.diff(user_before, audit.snapshot(user))
+        )
 
     before = audit.snapshot(membership)
     membership.role = role
@@ -202,8 +220,8 @@ def reset_password(ctx: ServiceContext, membership_id: int, new_password: str) -
     from chimera.services.auth import set_password
 
     membership = get_membership(ctx, membership_id)
-    if membership.user.is_superadmin and not ctx.is_superadmin:
-        raise ServiceError("Пароль системного администратора меняет только он сам.")
+    if not can_manage_account(ctx, membership):
+        raise PermissionDenied("Сброс пароля этой учётной записи недоступен.")
     set_password(ctx, membership.user, new_password, must_change=True)
 
 

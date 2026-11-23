@@ -93,6 +93,7 @@ def user_edit(membership_id: int) -> Any:
     return render_template(
         "admin/user_edit.html",
         membership=membership,
+        can_manage_account=users_service.can_manage_account(current, membership),
         roles=list(Role),
         divisions=org_service.list_divisions(current, include_inactive=False),
     )
