@@ -5,10 +5,22 @@
     <div><h1>{{ user.full_name }}</h1><p>Логин: {{ user.username }}{% if user.email %} · {{ user.email }}{% endif %}</p></div>
     <div class="page-actions"><a class="btn" href="{{ url_for('auth.change_password') }}">Сменить пароль</a></div>
 </div>
+<section class="panel" aria-labelledby="appearance-title">
+    <h2 id="appearance-title">Оформление</h2>
+    <div class="form-field theme-field" hidden>
+        <label for="theme-choice">Тема интерфейса</label>
+        <select id="theme-choice" data-theme-choice>
+            <option value="system">Системная</option>
+            <option value="light">Светлая</option>
+            <option value="dark">Тёмная</option>
+        </select>
+    </div>
+    <noscript><p>Для выбора темы включите JavaScript. Сейчас используется системная тема.</p></noscript>
+</section>
 <section class="panel">
     <h2>Организации и роли</h2>
     {% if user.is_superadmin %}<p><span class="badge badge-info">Системный администратор</span> — доступ администратора во всех организациях.</p>{% endif %}
-    <div class="table-wrap">
+    <div class="table-wrap" role="region" aria-label="Таблица" tabindex="0">
         <table class="data-table">
             <thead><tr><th>Организация</th><th>Роль</th><th>Подразделение</th></tr></thead>
             <tbody>

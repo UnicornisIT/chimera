@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/chimera-logo-dark.svg">
-    <img src="docs/images/chimera-logo.svg" alt="Chimera" width="420">
+    <source media="(prefers-color-scheme: dark)" srcset="chimera/static/images/chimera-logo-dark.png">
+    <img src="chimera/static/images/chimera-logo.png" alt="Chimera" width="420">
   </picture>
 </p>
 

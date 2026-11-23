@@ -7,7 +7,7 @@
     if (!menu.contains(event.target)) menu.open = false;
   });
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && menu.open) {
+    if (event.key === 'Escape' && menu.open && !event.defaultPrevented) {
       menu.open = false;
       trigger.focus();
       event.preventDefault();

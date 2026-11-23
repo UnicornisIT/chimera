@@ -29,7 +29,7 @@
     <label class="form-check"><input type="checkbox" name="acting" value="1"{% if filters.acting_only %} checked{% endif %}> Только в режиме «работать как»</label>
     <div><button type="submit" class="btn btn-secondary">Применить</button></div>
 </form>
-<div class="table-wrap">
+<div class="table-wrap" role="region" aria-label="Таблица" tabindex="0">
     <table class="data-table">
         <thead><tr><th>Время</th><th>Пользователь</th><th>Роль</th><th>Действие</th><th>Объект</th><th>Изменения</th><th>IP</th></tr></thead>
         <tbody>
