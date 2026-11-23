@@ -20,7 +20,7 @@
       static/      css/js/images
       documents/   встроенные .docx-шаблоны и движок документов
       importers/   импорт таблиц и профили сопоставления колонок
-    migrations/    Alembic
+      migrations/  Alembic
     desktop/       Windows-клиент
     deploy/        docker, nginx, systemd
     tests/

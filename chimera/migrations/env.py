@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from logging.config import fileConfig
-from typing import Any
+from typing import Any, Literal
 
 from alembic import context
 from alembic.runtime.migration import MigrationContext
@@ -24,7 +24,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
-def _render_item(type_: str, obj: Any, autogen_context: Any) -> str | bool:
+def _render_item(type_: str, obj: Any, autogen_context: Any) -> str | Literal[False]:
     """Свои TypeDecorator в миграциях записываются базовыми типами: миграции не
     должны зависеть от кода приложения, который со временем меняется."""
     if type_ == "type" and isinstance(obj, UTCDateTime):

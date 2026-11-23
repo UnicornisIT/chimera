@@ -90,6 +90,13 @@ python -m chimera run      # http://127.0.0.1:5000
 | `python -m chimera bootstrap` | создать первую организацию и администратора |
 | `python -m chimera run` | HTTP-запуск Desktop Local на loopback |
 
+При установке из wheel миграции поставляются в `chimera/migrations/`.
+Для `migrate`, `status` и `bootstrap --no-input` достаточно активировать
+окружение пакета и передать настройки режима. Эти команды можно запустить
+из любого каталога. Файл `alembic.ini` используется в checkout для разработки.
+Из другого каталога передайте `python -m alembic -c /путь/к/checkout/alembic.ini`
+с нужной командой Alembic.
+
 ## Переменные окружения
 
 Полный список с комментариями — в [`.env.example`](../.env.example). Главные:
@@ -106,7 +113,10 @@ python -m chimera run      # http://127.0.0.1:5000
 
 
 Относительные значения `CHIMERA_DATA_DIR`, `CHIMERA_UPLOAD_DIR` и
-`CHIMERA_BACKUP_DIR` разрешаются от корня проекта. Относительный путь в
+`CHIMERA_BACKUP_DIR` разрешаются от корня checkout или от домашнего каталога
+при установке wheel. Установленный Desktop Local на Linux по умолчанию
+использует `$XDG_DATA_HOME/Chimera` или `~/.local/share/Chimera`.
+Относительный путь в
 SQLite URL разрешается от текущего рабочего каталога процесса. Для
 однозначного запуска используйте абсолютные пути, например
 `sqlite:///C:/Users/USER/AppData/Local/Chimera/chimera.db` на Windows и
@@ -127,3 +137,8 @@ pytest` для SQLite или `python -m pytest --chimera-postgres` для Postgr
 после тестов. Для браузера используйте `python -m scripts.dev_test_env
 postgres run` или `python -m scripts.dev_test_env sqlite run`. См.
 [инструкцию стендов](planning/STAGE_02_TEST_ENVS.md).
+
+Проверка поставки запускается через `python -m scripts.check_installed_migrations`
+из checkout при установленном модуле `build`. Она собирает два wheel, проверяет
+архивы и запускает команды из отдельных временных окружений. Флаг `--postgres`
+добавляет проверку на выделенном PostgreSQL 16 (loopback-порт 55441).

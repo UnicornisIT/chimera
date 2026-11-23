@@ -105,6 +105,7 @@ def test_paths_relative_to_checkout_and_working_directory(
 ) -> None:
     source = tmp_path / "checkout"
     source.mkdir()
+    (source / "pyproject.toml").touch()
     monkeypatch.setattr(config, "PROJECT_ROOT", source)
     monkeypatch.chdir(tmp_path)
     settings = load_settings(
@@ -132,6 +133,8 @@ def test_windows_profile_and_legacy_selection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     checkout = tmp_path / "source"
+    checkout.mkdir()
+    (checkout / "pyproject.toml").touch()
     monkeypatch.setattr(config, "PROJECT_ROOT", checkout)
     env = {"CHIMERA_MODE": "desktop-local", "LOCALAPPDATA": str(tmp_path / "profile")}
     first = load_settings(env, require_secrets=False)

@@ -104,6 +104,11 @@ jobs:
           export PATH="/usr/lib/postgresql/16/bin:$PATH"
           initdb --version
           pytest --chimera-postgres
+      - name: "Packaging: installed wheel migrations"
+        run: |
+          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          python -m pip install build
+          python -m scripts.check_installed_migrations --postgres
 
   tests-windows:
     name: Тесты (windows, SQLite)
@@ -130,6 +135,11 @@ jobs:
           alembic check
       - name: pytest
         run: pytest
+      - name: "Packaging: installed wheel migrations"
+        run: |
+          python -m pip install build
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m scripts.check_installed_migrations
 
   docker:
     name: Docker-образ (сборка и запуск)
@@ -177,6 +187,17 @@ jobs:
       - name: Проверить содержимое образа
         run: |
           compose="docker compose -f deploy/docker-compose.yml --env-file .env"
+          $compose exec -T -w /tmp app python -I -B -c '
+          import sysconfig
+          from pathlib import Path
+          import chimera
+          from chimera.core.migrations import MIGRATIONS_DIR
+          site = Path(sysconfig.get_path("purelib")).resolve()
+          assert Path(chimera.__file__).resolve().is_relative_to(site)
+          assert MIGRATIONS_DIR == site / "chimera" / "migrations"
+          print(chimera.__file__, MIGRATIONS_DIR)
+          '
+          $compose exec -T -w /tmp app python -I -B -m chimera migrate
           $compose exec -T app python -m chimera status
           $compose exec -T app gunicorn --version
           $compose exec -T app pg_dump --version | grep -q ' 16\.'

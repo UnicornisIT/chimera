@@ -120,7 +120,7 @@ def _check_desktop_location(path: Path, *, name: str) -> None:
 
 def _desktop_dir(values: Mapping[str, str]) -> Path:
     legacy = PROJECT_ROOT / "instance"
-    if os.name != "nt":
+    if os.name != "nt" and (PROJECT_ROOT / "pyproject.toml").is_file():
         return legacy
     legacy_entries = ("chimera.db", "secret_key", "data_encryption.key", "uploads", "backups")
     if any((legacy / name).exists() for name in legacy_entries):
@@ -128,8 +128,16 @@ def _desktop_dir(values: Mapping[str, str]) -> Path:
             "Обнаружен прежний каталог Desktop Local. "
             "Укажите его явно в CHIMERA_DATA_DIR, чтобы продолжить с прежними данными."
         )
-    local = values.get("LOCALAPPDATA")
-    return (Path(local) if local else Path.home() / "AppData" / "Local") / "Chimera"
+    if os.name == "nt":
+        local = values.get("LOCALAPPDATA")
+        return (Path(local) if local else Path.home() / "AppData" / "Local") / "Chimera"
+    xdg_data = Path(values.get("XDG_DATA_HOME", ""))
+    return (xdg_data if xdg_data.is_absolute() else Path.home() / ".local" / "share") / "Chimera"
+
+
+def _directory_base() -> Path:
+    # В установленном пакете PROJECT_ROOT может указывать на общий site-packages.
+    return PROJECT_ROOT if (PROJECT_ROOT / "pyproject.toml").is_file() else Path.home()
 
 
 def _database_url(raw: str, mode: AppMode, data_dir: Path) -> str:
@@ -311,7 +319,7 @@ def validate_settings(settings: Settings, *, require_secrets: bool = True) -> Se
         ("backup_dir", settings.backup_dir),
     ):
         name = f"CHIMERA_{field_name.upper()}"
-        path = _path(str(path), path, PROJECT_ROOT, name=name)
+        path = _path(str(path), path, _directory_base(), name=name)
         _check_path(path, name=name)
         if desktop:
             _check_desktop_location(path, name=name)
@@ -403,15 +411,14 @@ def load_settings(
         raise ConfigError("DATABASE_URL обязателен в режиме server")
     if not desktop and get("CHIMERA_DATA_DIR") is None:
         raise ConfigError("CHIMERA_DATA_DIR обязателен в режиме server")
-    default_dir = (
-        _desktop_dir(values) if desktop and get("CHIMERA_DATA_DIR") is None else PROJECT_ROOT
-    )
-    data_dir = _path(get("CHIMERA_DATA_DIR"), default_dir, PROJECT_ROOT, name="CHIMERA_DATA_DIR")
+    base_dir = _directory_base()
+    default_dir = _desktop_dir(values) if desktop and get("CHIMERA_DATA_DIR") is None else base_dir
+    data_dir = _path(get("CHIMERA_DATA_DIR"), default_dir, base_dir, name="CHIMERA_DATA_DIR")
     upload_dir = _path(
-        get("CHIMERA_UPLOAD_DIR"), data_dir / "uploads", PROJECT_ROOT, name="CHIMERA_UPLOAD_DIR"
+        get("CHIMERA_UPLOAD_DIR"), data_dir / "uploads", base_dir, name="CHIMERA_UPLOAD_DIR"
     )
     backup_dir = _path(
-        get("CHIMERA_BACKUP_DIR"), data_dir / "backups", PROJECT_ROOT, name="CHIMERA_BACKUP_DIR"
+        get("CHIMERA_BACKUP_DIR"), data_dir / "backups", base_dir, name="CHIMERA_BACKUP_DIR"
     )
 
     org_type = (get("CHIMERA_DEFAULT_ORG_TYPE") or "college").strip()

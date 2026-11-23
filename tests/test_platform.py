@@ -17,7 +17,7 @@ from flask.testing import FlaskClient
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
-from chimera.core.config import Settings, load_settings
+from chimera.core.config import ConfigError, Settings, load_settings
 from chimera.core.context import PermissionDenied
 from chimera.core.db import Base, Database
 from chimera.core.migrations import SchemaTooNewError, alembic_config, schema_state
@@ -58,6 +58,13 @@ def test_downgrade_and_upgrade_roundtrip(migration_target: tuple[Database, Confi
     command.downgrade(config, "base")
     command.upgrade(config, "head")
     assert schema_state(db.engine, db.url).up_to_date
+
+
+def test_missing_packaged_revision_rejects_installation(tmp_path: Path) -> None:
+    (tmp_path / "env.py").touch()
+    (tmp_path / "script.py.mako").touch()
+    with pytest.raises(ConfigError, match="отсутствуют ресурсы миграций Alembic"):
+        alembic_config("sqlite:///unused.db", migrations_dir=tmp_path)
 
 
 def test_unknown_revision_blocks_start(migration_target: tuple[Database, Config]) -> None:

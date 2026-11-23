@@ -105,7 +105,7 @@ chimera/
   web/         Blueprints: тонкие роуты
   templates/   Jinja-шаблоны
   static/      стили, скрипты, изображения
-migrations/    Alembic
+chimera/migrations/    Alembic
 deploy/        Docker, nginx, systemd
 tests/         pytest (SQLite и PostgreSQL)
 ```
