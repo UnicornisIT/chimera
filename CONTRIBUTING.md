@@ -15,12 +15,10 @@ py -3.11 -m venv .venv
 
 На Linux используйте `python3.11` и `.venv/bin/...`.
 
-Для тестов на PostgreSQL поднимите базу из `deploy/docker-compose.dev.yml`:
-
-```bash
-docker compose -f deploy/docker-compose.dev.yml up -d
-export CHIMERA_TEST_DATABASE_URL=postgresql+psycopg://chimera:chimera-dev@localhost:5433/chimera_test
-```
+Для SQLite запустите `python -m pytest`. Для PostgreSQL добавьте утилиты
+PostgreSQL 16 в `PATH` и запустите `python -m pytest --chimera-postgres`.
+Удалите `CHIMERA_TEST_DATABASE_URL` из окружения. Pytest управляет
+собственным временным кластером на `127.0.0.1:55439`.
 
 ## Данные
 

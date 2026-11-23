@@ -63,18 +63,19 @@ Chimera — «сестра» [Manticore](https://github.com/UnicornisIT/manticor
 ### Docker Compose (сервер)
 
 ```bash
-cp .env.example .env   # задайте SECRET_KEY, DATA_ENCRYPTION_KEY, POSTGRES_PASSWORD, ADMIN_DEFAULT_PASSWORD
+cp .env.example .env   # задайте DATABASE_URL с хостом db, SECRET_KEY,
+                       # DATA_ENCRYPTION_KEY, POSTGRES_PASSWORD и ADMIN_DEFAULT_PASSWORD
 docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
 ```
 
-Откройте `http://localhost`, войдите как `admin` и смените пароль.
+Встроенный nginx по умолчанию доступен на loopback по HTTP для проверки доступности. Для входа в Server настройте доверенный HTTPS-прокси по [инструкции](docs/deployment.md).
 
 ### Локально из исходников
 
 ```bash
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
-cp .env.example .env    # для разработки достаточно CHIMERA_MODE=desktop-local
+cp .env.example .env    # установите CHIMERA_MODE=desktop-local, оставьте DATABASE_URL пустым
 .venv/bin/python -m chimera migrate
 .venv/bin/python -m chimera run
 ```

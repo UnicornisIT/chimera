@@ -1,0 +1,3 @@
+# Synthetic values in the Stage 06 test fixtures, generated at runtime in later commits.
+94882a282374dabe5e839f37c40d342e58f0e63c:tests/test_config.py:generic-api-key:29
+94882a282374dabe5e839f37c40d342e58f0e63c:tests/test_config.py:generic-api-key:336

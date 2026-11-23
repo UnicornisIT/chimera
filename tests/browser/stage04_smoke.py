@@ -45,7 +45,7 @@ ACCOUNTS = (
 
 def add_accounts(settings: Settings) -> None:
     assert settings.admin_default_password
-    database = Database(settings.database_url)
+    database = Database.from_settings(settings)
     try:
         with database.transaction() as session:
             college = session.scalars(

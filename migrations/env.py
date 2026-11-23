@@ -6,11 +6,16 @@ from logging.config import fileConfig
 from typing import Any
 
 from alembic import context
+from alembic.runtime.migration import MigrationContext
+from alembic.util.exc import CommandError
+from sqlalchemy import Connection
+from sqlalchemy.exc import SQLAlchemyError
 
 import chimera.models  # noqa: F401 - регистрирует все таблицы
-from chimera.core.config import load_settings
+from chimera.core.config import AppMode, ConfigError, load_settings, validate_settings
 from chimera.core.crypto import EncryptedString
-from chimera.core.db import Base, UTCDateTime, make_engine
+from chimera.core.db import Base, Database, UTCDateTime
+from chimera.core.migrations import check_unversioned_schema
 
 config = context.config
 if config.config_file_name is not None:
@@ -55,19 +60,31 @@ def run_migrations_online() -> None:
     if connection is not None:
         _run(connection)
         return
-    engine = make_engine(_database_url())
+    settings = load_settings(require_secrets=False)
+    if settings.mode is AppMode.SERVER:
+        settings = validate_settings(settings)
+    database = Database.from_settings(settings)
     try:
-        with engine.connect() as conn:
+        with database.engine.connect() as conn:
             _run(conn)
     finally:
-        engine.dispose()
+        database.dispose()
 
 
-def _run(connection: object) -> None:
+def _run(connection: Connection) -> None:
+    def check_schema() -> None:
+        current = MigrationContext.configure(connection).get_current_revision()
+        check_unversioned_schema(connection, current)
+
+    if connection.in_transaction():
+        check_schema()
+    else:
+        with connection.begin():
+            check_schema()
     context.configure(
-        connection=connection,  # type: ignore[arg-type]
+        connection=connection,
         target_metadata=target_metadata,
-        render_as_batch=connection.dialect.name == "sqlite",  # type: ignore[attr-defined]
+        render_as_batch=connection.dialect.name == "sqlite",
         compare_type=True,
         render_item=_render_item,
     )
@@ -75,7 +92,12 @@ def _run(connection: object) -> None:
         context.run_migrations()
 
 
-if context.is_offline_mode():
-    run_migrations_offline()
-else:
-    run_migrations_online()
+try:
+    if context.is_offline_mode():
+        run_migrations_offline()
+    else:
+        run_migrations_online()
+except ConfigError as exc:
+    raise CommandError(str(exc)) from None
+except SQLAlchemyError:
+    raise CommandError("Не удалось подключиться к базе или выполнить миграцию") from None

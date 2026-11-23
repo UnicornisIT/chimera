@@ -16,8 +16,11 @@
    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # DATA_ENCRYPTION_KEY
    ```
 
-   Обязательно задайте `SECRET_KEY`, `DATA_ENCRYPTION_KEY`, `POSTGRES_PASSWORD` и
+   Обязательно задайте `DATABASE_URL`, `SECRET_KEY`, `DATA_ENCRYPTION_KEY`, `POSTGRES_PASSWORD` и
    `ADMIN_DEFAULT_PASSWORD` (не короче 10 символов, буквы и цифры).
+   В `DATABASE_URL` укажите хост `db` и порт `5432`. Имя базы, роль и пароль
+   должны совпадать с настройками контейнера PostgreSQL. Пароль в URL нужен
+   в percent-encoding, например `a%40b%3Ac` для `a@b:c`.
    Укажите `CHIMERA_DEFAULT_ORG_NAME` и `CHIMERA_DEFAULT_ORG_TYPE`
    (`university` или `college`) — так будет создана первая организация.
 
@@ -27,15 +30,15 @@
    docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
    ```
 
-   Контейнер приложения при старте выполняет миграции (`python -m chimera migrate`)
+   Контейнер приложения перед миграцией проверяет ключи и PostgreSQL 16
    и создаёт начального администратора, если пользователей ещё нет.
 
-3. Откройте `http://<сервер>` и войдите под `admin` (или `ADMIN_DEFAULT_USERNAME`).
+3. Откройте адрес доверенного HTTPS-прокси и войдите под `admin` (или `ADMIN_DEFAULT_USERNAME`).
    Система потребует сменить пароль. После этого `ADMIN_DEFAULT_PASSWORD`
    можно удалить из `.env`.
 
-Для доступа из сети настройте HTTPS (см. [развёртывание](deployment.md)) и
-оставьте `SESSION_COOKIE_SECURE=true`.
+Для Server настройте HTTPS по [инструкции](deployment.md). Защитите доступ к
+файлу `.env` и храните резервные копии ключей отдельно от базы.
 
 ## Вариант 2. Ручная установка
 
@@ -43,7 +46,7 @@
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -r requirements-prod.lock   # Linux, точные версии
 .venv/bin/python -m pip install --no-deps -e .
-cp .env.example .env     # DATABASE_URL=postgresql+psycopg://chimera:пароль@localhost:5432/chimera
+cp .env.example .env     # задайте URL PostgreSQL, ключи и CHIMERA_DATA_DIR
 .venv/bin/python -m chimera migrate
 .venv/bin/python -m chimera bootstrap   # спросит пароль, если ADMIN_DEFAULT_PASSWORD не задан
 .venv/bin/gunicorn --config deploy/gunicorn.conf.py chimera.wsgi:app
@@ -60,10 +63,19 @@ CHIMERA_MODE=desktop-local
 ADMIN_DEFAULT_PASSWORD=СложныйПароль123
 ```
 
-В этом режиме база `instance/chimera.db` создаётся и обновляется автоматически,
-а `SECRET_KEY` и `DATA_ENCRYPTION_KEY` генерируются и сохраняются в
-`instance/` (файлы `secret_key` и `data_encryption.key`). **Сделайте копию ключа
-шифрования**: без него зашифрованные поля не восстановить.
+Оставьте `DATABASE_URL` пустым и используйте `APP_HOST=127.0.0.1`.
+В новом профиле Windows база `chimera.db` и файлы ключей `secret_key` и
+`data_encryption.key` создаются в `%LOCALAPPDATA%/Chimera`. Linux из исходников
+по умолчанию использует `instance`. При обнаружении прежней базы, ключей,
+загрузок или копий в `instance` явно укажите `CHIMERA_DATA_DIR=instance`, чтобы продолжить
+работу с этими файлами. Явно настроенный каталог сохраняет приоритет.
+Сделайте отдельную копию ключа шифрования. Переключение режимов оставляет
+данные в прежних каталогах, переноса и синхронизации нет.
+
+Если файл SQLite уже существует, запуск требует ключ подписи и исходный
+ключ шифрования. Восстановите `secret_key` и `data_encryption.key` из копии
+или укажите ключи явно в `SECRET_KEY` и `DATA_ENCRYPTION_KEY`. Для нового
+профиля ключи создаёт команда `run` или `migrate`.
 
 ```bash
 python -m chimera run      # http://127.0.0.1:5000
@@ -76,7 +88,7 @@ python -m chimera run      # http://127.0.0.1:5000
 | `python -m chimera migrate` | обновить схему базы до последней версии |
 | `python -m chimera status` | версия приложения и ревизия схемы |
 | `python -m chimera bootstrap` | создать первую организацию и администратора |
-| `python -m chimera run` | сервер разработки |
+| `python -m chimera run` | HTTP-запуск Desktop Local на loopback |
 
 ## Переменные окружения
 
@@ -85,9 +97,33 @@ python -m chimera run      # http://127.0.0.1:5000
 | Переменная | Смысл |
 |---|---|
 | `CHIMERA_MODE` | `server` или `desktop-local` |
-| `DATABASE_URL` | строка подключения; пусто — SQLite в `CHIMERA_DATA_DIR` |
+| `DATABASE_URL` | Server требует URL PostgreSQL, Desktop Local принимает URL файла SQLite или пустое значение |
 | `SECRET_KEY` | подпись сессий, ≥ 32 символов |
 | `DATA_ENCRYPTION_KEY` | ключ Fernet для персональных данных; несколько через запятую — ротация |
-| `CHIMERA_DATA_DIR` | каталог данных: SQLite, загрузки, бэкапы |
+| `CHIMERA_DATA_DIR` | Server требует отдельный каталог, Desktop Local использует каталог профиля или явный путь |
 | `PG_DUMP_PATH` | путь к `pg_dump` для резервных копий PostgreSQL |
 | `LOGIN_MAX_ATTEMPTS`, `LOGIN_WINDOW_SECONDS` | ограничение попыток входа |
+
+
+Относительные значения `CHIMERA_DATA_DIR`, `CHIMERA_UPLOAD_DIR` и
+`CHIMERA_BACKUP_DIR` разрешаются от корня проекта. Относительный путь в
+SQLite URL разрешается от текущего рабочего каталога процесса. Для
+однозначного запуска используйте абсолютные пути, например
+`sqlite:///C:/Users/USER/AppData/Local/Chimera/chimera.db` на Windows и
+`sqlite:////home/user/chimera/chimera.db` на Linux. Каталог и существующий
+файл должны быть доступны текущему пользователю. Desktop Local отклоняет
+каталоги сборки и временный каталог распаковки приложения.
+
+Для диагностики проверьте режим, имя параметра в сообщении, права доступа и
+`python -m chimera status`. При обращении за поддержкой передавайте сообщение
+об ошибке без файла `.env`, ключей и строки подключения.
+
+## Изолированные тесты
+
+Из checkout с установленными зависимостями разработки запустите `python -m
+pytest` для SQLite или `python -m pytest --chimera-postgres` для PostgreSQL
+16. Добавьте каталог утилит PostgreSQL 16 в `PATH` и освободите loopback-порт
+55439. Pytest создаёт временный кластер, проверяет его каталог и останавливает
+после тестов. Для браузера используйте `python -m scripts.dev_test_env
+postgres run` или `python -m scripts.dev_test_env sqlite run`. См.
+[инструкцию стендов](planning/STAGE_02_TEST_ENVS.md).

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from psycopg import pq
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
@@ -86,19 +87,21 @@ def _postgres_backup(database_url: str, directory: Path, pg_dump: str) -> Path:
             f"Не найдена программа pg_dump ({pg_dump}). Установите клиент PostgreSQL той же "
             "основной версии, что и сервер, или укажите полный путь в PG_DUMP_PATH."
         )
+    # libpq должен получить те же параметры маршрутизации и TLS, что и приложение.
     url = make_url(database_url)
-    target = _target(directory, "dump")
+    _, connect_args = url.get_dialect()().create_connect_args(url)
+    libpq_env = {
+        option.keyword.decode("ascii"): option.envvar.decode("ascii")
+        for option in pq.Conninfo.get_defaults()
+        if option.keyword and option.envvar
+    }
     env = dict(os.environ)
-    if url.password:
-        env["PGPASSWORD"] = str(url.password)
-    args = [executable, "--format=custom", "--no-owner", f"--file={target}"]
-    if url.host:
-        args.append(f"--host={url.host}")
-    if url.port:
-        args.append(f"--port={url.port}")
-    if url.username:
-        args.append(f"--username={url.username}")
-    args.append(f"--dbname={url.database}")
+    for name, value in connect_args.items():
+        if name not in libpq_env:
+            raise BackupError("Параметры подключения PostgreSQL несовместимы с запуском pg_dump.")
+        env[libpq_env[name]] = str(value)
+    target = _target(directory, "dump")
+    args = [executable, "--format=custom", "--no-owner", "--no-password", f"--file={target}"]
     try:
         completed = subprocess.run(  # noqa: S603
             args,
@@ -108,13 +111,15 @@ def _postgres_backup(database_url: str, directory: Path, pg_dump: str) -> Path:
             timeout=PG_DUMP_TIMEOUT_SECONDS,
             check=False,
         )
-    except subprocess.TimeoutExpired as exc:
+    except subprocess.TimeoutExpired:
         target.unlink(missing_ok=True)
-        raise BackupError("pg_dump не завершился за отведённое время.") from exc
+        raise BackupError("pg_dump не завершился за отведённое время.") from None
+    except OSError:
+        target.unlink(missing_ok=True)
+        raise BackupError("Не удалось запустить pg_dump.") from None
     if completed.returncode != 0:
         target.unlink(missing_ok=True)
-        detail = (completed.stderr or "").strip().splitlines()[-1:] or ["без подробностей"]
-        raise BackupError(f"pg_dump завершился с ошибкой: {detail[0]}")
+        raise BackupError("pg_dump завершился с ошибкой. Проверьте подключение и права PostgreSQL.")
     _restrict(target)
     return target
 

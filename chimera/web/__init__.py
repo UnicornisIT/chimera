@@ -7,17 +7,19 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from alembic.util.exc import CommandError
 from flask import Flask, Response, abort, g, render_template, request, session
+from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from chimera.core import crypto
-from chimera.core.config import AppMode, ConfigError, Settings, load_settings
-from chimera.core.context import NotFound, PermissionDenied
+from chimera.core.config import AppMode, ConfigError, Settings, load_settings, validate_settings
+from chimera.core.context import NotFound, PermissionDenied, ServiceError
 from chimera.core.db import Database, utcnow
 from chimera.core.features import FEATURES, FeatureStatus, get_feature
 from chimera.core.metadata import APP_METADATA, app_version
-from chimera.core.migrations import schema_state, upgrade_head
+from chimera.core.migrations import SchemaTooNewError, schema_state, upgrade_head
 from chimera.core.permissions import ROLE_LABELS, Permission, SystemPermission
 from chimera.core.security import (
     CSRF_FORM_FIELD,
@@ -36,7 +38,7 @@ log = logging.getLogger(__name__)
 
 
 def create_app(settings: Settings | None = None) -> Flask:
-    settings = settings or load_settings()
+    settings = load_settings() if settings is None else validate_settings(settings)
     app = Flask(
         "chimera",
         template_folder=str(PACKAGE_DIR / "templates"),
@@ -56,14 +58,21 @@ def create_app(settings: Settings | None = None) -> Flask:
     if settings.mode is AppMode.SERVER and not settings.testing:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)  # type: ignore[method-assign]
 
-    if settings.data_encryption_key:
-        crypto.configure(settings.data_encryption_key, settings.blind_index_key)
-
-    database = Database(settings.database_url)
+    database = Database.from_settings(settings)
     app.extensions["chimera.settings"] = settings
     app.extensions["chimera.db"] = database
-    _prepare_schema(database, settings)
-    _bootstrap(database, settings)
+    try:
+        _prepare_schema(database, settings)
+        crypto.configure(settings.data_encryption_key, settings.blind_index_key)
+        _bootstrap(database, settings)
+    except (ConfigError, SchemaTooNewError, ServiceError) as exc:
+        database.dispose()
+        raise ConfigError(str(exc)) from None
+    except (CommandError, SQLAlchemyError):
+        database.dispose()
+        raise ConfigError(
+            "Не удалось подготовить базу Chimera. Проверьте подключение и схему."
+        ) from None
 
     _register_request_hooks(app, settings)
     _register_template_helpers(app)
@@ -85,7 +94,7 @@ def _prepare_schema(database: Database, settings: Settings) -> None:
         return
     if settings.mode is AppMode.DESKTOP_LOCAL or settings.testing:
         log.info("Обновление схемы базы %s → %s", state.current, state.head)
-        upgrade_head(database.url)
+        upgrade_head(database)
         return
     raise ConfigError(
         f"Схема базы не обновлена (текущая {state.current or 'пусто'}, нужна {state.head}). "

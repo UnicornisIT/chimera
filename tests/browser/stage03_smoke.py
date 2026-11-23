@@ -104,11 +104,16 @@ def login(page: Page, base: str, password: str) -> None:
     page.get_by_role("button", name="Войти").click()
     expect(page.get_by_role("alert")).to_be_visible()
     page.locator("#password").fill(password)
-    page.get_by_role("button", name="Войти").click()
+    with page.expect_response(
+        lambda response: response.url == base + "/login" and response.request.method == "POST"
+    ) as login_result:
+        page.get_by_role("button", name="Войти").click()
     changed_password = password + "Stage03"
-    if page.url == base + "/login":
+    if login_result.value.status == 200:
+        expect(page.get_by_role("alert")).to_be_visible()
         page.locator("#password").fill(changed_password)
         page.get_by_role("button", name="Войти").click()
+    page.wait_for_url(re.compile(r"/(?:password)?$"))
     if page.url == base + "/password":
         page.locator("#current_password").fill(password)
         page.locator("#new_password").fill(changed_password)
