@@ -12,11 +12,11 @@ from chimera.core.audit import AuditLog, diff, snapshot
 from chimera.core.context import ServiceError
 from chimera.core.db import Database
 from chimera.core.permissions import Role
-from chimera.core.tenancy import unscoped
+from chimera.core.tenancy import bind_organization, unscoped
 from chimera.core.terms import OrgType
-from chimera.models import Division, User
+from chimera.models import Division, Membership, User
 from chimera.services import audit_log, organizations, users
-from tests.conftest import PASSWORD, World, login, post
+from tests.conftest import PASSWORD, World, csrf, login, post
 
 
 def test_division_hierarchy_rules(session: Session, world: World) -> None:
@@ -183,6 +183,54 @@ def test_existing_user_can_join_second_organization(session: Session, world: Wor
     member = users.create_member(ctx, users.NewUserData("uni.curator", "", None, "", "head"))
     assert member.user_id == world.university.users[Role.CURATOR].id
     assert member.role is Role.HEAD
+
+
+@pytest.mark.parametrize("protected", ["shared", "inactive_membership", "system"])
+def test_organization_admin_cannot_change_protected_account(
+    client: FlaskClient, session: Session, world: World, protected: str
+) -> None:
+    user = world.superadmin if protected == "system" else world.university.users[Role.CURATOR]
+    if protected == "inactive_membership":
+        bind_organization(session, world.university.organization.id)
+        other = session.scalars(select(Membership).where(Membership.user_id == user.id)).one()
+        other.is_active = False
+        session.flush()
+    bind_organization(session, world.college.organization.id)
+    membership = Membership(
+        organization_id=world.college.organization.id, user_id=user.id, role=Role.VIEWER
+    )
+    session.add(membership)
+    session.commit()
+    original_hash = user.password_hash
+    original_name = user.full_name
+    edit = f"/admin/users/{membership.id}"
+
+    login(client, "col.admin")
+    page = client.get(edit).get_data(as_text=True)
+    assert 'id="full_name" name="full_name"' in page and "readonly" in page
+    assert f'action="{edit}/password"' not in page
+    token = csrf(client, edit)
+    assert (
+        client.post(
+            edit + "/password", data={"csrf_token": token, "password": PASSWORD}
+        ).status_code
+        == 403
+    )
+    membership_data = {
+        "csrf_token": token,
+        "role": "curator",
+        "is_active": "1",
+        "email": user.email or "",
+    }
+    assert client.post(edit, data={**membership_data, "full_name": "Другое имя"}).status_code == 403
+    assert (
+        client.post(edit, data={**membership_data, "full_name": original_name}).status_code == 302
+    )
+    updated_user = session.get(User, user.id)
+    assert updated_user is not None
+    session.refresh(membership)
+    assert (updated_user.password_hash, updated_user.full_name) == (original_hash, original_name)
+    assert membership.role is Role.CURATOR
 
 
 def test_admin_cannot_demote_self(session: Session, world: World) -> None:

@@ -192,12 +192,12 @@ def _register_error_handlers(app: Flask) -> None:
         return render_template("error.html", code=code, title=title, message=message), code
 
     @app.errorhandler(PermissionDenied)
-    def _denied(exc: PermissionDenied) -> tuple[str, int]:
-        return _render(403, "Доступ запрещён", str(exc) or "Недостаточно прав.")
+    def _denied(_exc: PermissionDenied) -> tuple[str, int]:
+        return _render(403, "Доступ запрещён", "У вас нет доступа к этому разделу или действию.")
 
     @app.errorhandler(NotFound)
-    def _not_found(exc: NotFound) -> tuple[str, int]:
-        return _render(404, "Не найдено", str(exc) or "Запись не найдена.")
+    def _not_found(_exc: NotFound) -> tuple[str, int]:
+        return _render(404, "Не найдено", "Запись не найдена.")
 
     @app.errorhandler(HTTPException)
     def _http(exc: HTTPException) -> Any:
@@ -205,9 +205,20 @@ def _register_error_handlers(app: Flask) -> None:
             return exc
         titles = {
             400: "Некорректный запрос",
+            401: "Требуется вход",
             403: "Доступ запрещён",
             404: "Страница не найдена",
             405: "Метод не поддерживается",
             413: "Файл слишком большой",
         }
-        return _render(exc.code, titles.get(exc.code, "Ошибка"), exc.description or "")
+        messages = {
+            403: "У вас нет доступа к этому разделу или действию.",
+            500: "Не удалось выполнить запрос. Повторите попытку позже.",
+        }
+        # Для запроса без CSRF сохраняем подсказку об обновлении страницы.
+        message = (
+            exc.description
+            if exc.code == 400 and exc.description != type(exc).description
+            else messages.get(exc.code, "")
+        )
+        return _render(exc.code, titles.get(exc.code, "Ошибка"), message or "")

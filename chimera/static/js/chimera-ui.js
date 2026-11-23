@@ -5,15 +5,27 @@
   const sidebarToggle = document.querySelector('[data-sidebar-toggle]');
   const mobile = window.matchMedia('(max-width: 900px)');
 
+  document.querySelectorAll('details > summary[aria-controls]').forEach((trigger) => {
+    const details = trigger.parentElement;
+    const sync = () => trigger.setAttribute('aria-expanded', String(details.open));
+    details.addEventListener('toggle', sync);
+    sync();
+  });
+
   if (sidebarToggle) {
-    const sidebar = document.querySelector('.main-nav');
+    const sidebar = document.getElementById(sidebarToggle.getAttribute('aria-controls'));
+    const backdrop = document.querySelector('[data-sidebar-backdrop]');
+    const background = document.querySelectorAll(
+      '.skip-link, .role-banner, .topbar-organization, .topbar-actions, .app-content'
+    );
     const isMobileOpen = () => body.classList.contains('sidebar-open');
     const sync = () => {
-      const expanded = mobile.matches
-        ? isMobileOpen()
-        : !body.classList.contains('sidebar-collapsed');
+      const drawerOpen = mobile.matches && isMobileOpen();
+      const expanded = mobile.matches ? drawerOpen : !body.classList.contains('sidebar-collapsed');
       const label = expanded ? 'Свернуть боковую панель' : 'Развернуть боковую панель';
       sidebar.inert = !expanded;
+      backdrop.hidden = !drawerOpen;
+      background.forEach((element) => { element.inert = drawerOpen; });
       sidebarToggle.setAttribute('aria-expanded', String(expanded));
       sidebarToggle.setAttribute('aria-label', label);
       sidebarToggle.title = label;
@@ -23,10 +35,11 @@
       sync();
       (open ? sidebar.querySelector('.nav-brand') : sidebarToggle).focus();
     };
-    let collapsed = false;
-    try { collapsed = sessionStorage.getItem('chimera-sidebar') === 'collapsed'; } catch (e) { /* приватный режим */ }
-    if (collapsed) body.classList.add('sidebar-collapsed');
+    try {
+      body.classList.toggle('sidebar-collapsed', localStorage.getItem('chimera-sidebar') === 'collapsed');
+    } catch { /* браузер может ограничивать доступ к хранилищу */ }
     sync();
+    backdrop.addEventListener('click', () => setMobileOpen(false));
     sidebarToggle.addEventListener('click', () => {
       if (mobile.matches) {
         setMobileOpen(!isMobileOpen());
@@ -35,8 +48,8 @@
       body.classList.toggle('sidebar-collapsed');
       sync();
       try {
-        sessionStorage.setItem('chimera-sidebar', body.classList.contains('sidebar-collapsed') ? 'collapsed' : 'expanded');
-      } catch (e) { /* приватный режим */ }
+        localStorage.setItem('chimera-sidebar', body.classList.contains('sidebar-collapsed') ? 'collapsed' : 'expanded');
+      } catch { /* сворачивание работает и без хранилища */ }
     });
     mobile.addEventListener('change', () => {
       if (isMobileOpen()) {

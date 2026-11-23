@@ -150,7 +150,7 @@ def test_dashboard_marks_planned_modules(client: FlaskClient, world: World) -> N
     login(client, "col.curator")
     page = client.get("/").get_data(as_text=True)
     assert "Скоро" in page
-    assert "Администрирование" not in page
+    assert 'href="/admin/"' not in page
     post(client, "/logout")
     login(client, "col.admin")
-    assert "Администрирование" in client.get("/").get_data(as_text=True)
+    assert 'href="/admin/"' in client.get("/").get_data(as_text=True)

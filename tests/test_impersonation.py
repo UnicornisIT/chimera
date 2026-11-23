@@ -37,7 +37,7 @@ def test_act_as_curator_flow(client: FlaskClient, database: Database, world: Wor
     page = client.get("/").get_data(as_text=True)
     assert "Вы работаете как" in page
     assert curator.full_name in page
-    assert "Администрирование</summary>" not in page.replace("\n", "").replace(" ", "")
+    assert 'id="nav-management"' not in page
     assert client.get("/admin/users").status_code == 403
 
     started = _audit(database, "act_as.started")

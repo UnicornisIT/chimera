@@ -1,0 +1,57 @@
+{% from "_ui_macros.html" import nav_icon %}
+{% set management = [
+    ('admin.index', 'Обзор', ctx.can(P.USERS_MANAGE), ()),
+    ('admin.organizations', 'Организации', ctx.can(P.ORG_MANAGE), ('admin.organization_edit',)),
+    ('admin.divisions', t.division.nom_pl ~ ' и ' ~ t.department.nom_pl|lower, ctx.can(P.ORG_MANAGE), ('admin.division_edit',)),
+    ('admin.users', 'Пользователи', ctx.can(P.USERS_MANAGE), ('admin.user_new', 'admin.user_edit')),
+    ('admin.requests', 'Заявки', ctx.can(P.REQUESTS_APPROVE), ()),
+    ('admin.audit', 'Журнал аудита', ctx.can(P.AUDIT_VIEW), ()),
+    ('admin.act_as', 'Работать как…', ctx.can(P.ROLE_ACT_AS), ()),
+] %}
+{% set system = [
+    ('admin.organization_new', 'Новая организация', ctx.can_system(SP.ORGANIZATIONS_CREATE), ()),
+    ('admin.backups', 'Резервные копии', ctx.can_system(SP.BACKUPS_MANAGE), ()),
+] %}
+
+{% macro nav_link(target, label, related=(), icon=none) %}
+<a href="{{ url_for(target) }}" class="{{ 'sidebar-link' if icon else 'nav-group-link' }}{% if endpoint == target or endpoint in related %} active{% endif %}"
+   {% if endpoint == target %}aria-current="page"{% elif endpoint in related %}aria-current="location"{% endif %}>
+    {% if icon %}{{ nav_icon(icon) }}{% endif %}<span>{{ label }}</span>
+</a>
+{% endmacro %}
+
+{% macro nav_group(label, items, id) %}
+{% set visible = items|selectattr('2')|list %}
+{% if visible %}
+{% set current = namespace(found=false) %}
+{% for target, _, _, related in visible %}
+    {% if endpoint == target or endpoint in related %}{% set current.found = true %}{% endif %}
+{% endfor %}
+<li>
+    <details class="nav-dropdown"{% if current.found %} open{% endif %}>
+        <summary class="nav-dropdown-summary{% if current.found %} active{% endif %}" aria-controls="{{ id }}">
+            <span>{{ label }}</span>
+            <svg class="nav-dropdown-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        </summary>
+        <ul class="nav-dropdown-panel" id="{{ id }}">
+            {% for target, caption, _, related in visible %}
+            <li>{{ nav_link(target, caption, related) }}</li>
+            {% endfor %}
+        </ul>
+    </details>
+</li>
+{% endif %}
+{% endmacro %}
+
+<nav class="main-nav" id="app-sidebar" aria-label="Основная навигация">
+    <a href="{{ url_for('main.dashboard') }}" class="nav-brand" aria-label="{{ app_metadata.name }}, главная страница">
+        <img class="nav-brand-logo" src="{{ url_for('static', filename='images/chimera-logo-dark.png') }}" width="1937" height="453" alt="">
+    </a>
+    <ul class="sidebar-list">
+        {% if ctx.can(P.DASHBOARD_VIEW) %}
+        <li>{{ nav_link('main.dashboard', 'Главная', icon='home') }}</li>
+        {% endif %}
+        {{ nav_group('Управление', management, 'nav-management') }}
+        {{ nav_group('Системные операции', system, 'nav-system') }}
+    </ul>
+</nav>

@@ -11,8 +11,8 @@
     <h2>Данные и роль в организации</h2>
     {{ csrf_field() }}
     <div class="form-grid">
-        <div class="form-field"><label for="full_name">ФИО</label><input id="full_name" name="full_name" value="{{ u.full_name }}" required></div>
-        <div class="form-field"><label for="email">Почта</label><input id="email" name="email" type="email" value="{{ u.email or '' }}"></div>
+        <div class="form-field"><label for="full_name">ФИО</label><input id="full_name" name="full_name" value="{{ u.full_name }}" {% if can_manage_account %}required{% else %}readonly{% endif %}></div>
+        <div class="form-field"><label for="email">Почта</label><input id="email" name="email" type="email" value="{{ u.email or '' }}"{% if not can_manage_account %} readonly{% endif %}></div>
         <div class="form-field">
             <label for="role">Роль</label>
             <select id="role" name="role" data-role-select>{{ role_options(roles, membership.role) }}</select>
@@ -27,6 +27,7 @@
     </div>
     <div class="form-actions"><button type="submit" class="btn">Сохранить</button></div>
 </form>
+{% if can_manage_account %}
 <form method="post" action="{{ url_for('admin.user_reset_password', membership_id=membership.id) }}" class="panel" data-confirm="Установить временный пароль? Текущий пароль перестанет действовать.">
     <h2>Временный пароль</h2>
     {{ csrf_field() }}
@@ -35,4 +36,5 @@
     </div>
     <div class="form-actions"><button type="submit" class="btn btn-secondary" data-confirm-submit disabled>Установить</button></div>
 </form>
+{% endif %}
 {% endblock %}

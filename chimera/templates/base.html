@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-{% from "_ui_macros.html" import feature_badge, csrf_field, nav_icon, theme_toggle, flash_messages with context %}
+{% from "_ui_macros.html" import csrf_field, theme_toggle, flash_messages with context %}
 <html lang="ru" data-theme="system">
 <head>
     <meta charset="UTF-8">
@@ -15,8 +15,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/login.css') }}">
 </head>
 {% set endpoint = request.endpoint or '' %}
-{% set authenticated = current_user is not none and ctx is not none and ctx.organization_id is not none %}
+{% set authenticated = current_user is not none and not current_user.must_change_password and ctx is not none and ctx.organization_id is not none %}
 <body class="{{ 'app-authenticated' if authenticated else 'auth-page' }}{% if authenticated and acting %} is-acting{% endif %}">
+    <a class="skip-link btn" href="#main-content">К основному содержимому</a>
     {% if authenticated and acting %}
     <div class="role-banner" role="status">
         <span>Вы работаете как: {{ acting.label }}</span>
@@ -28,53 +29,19 @@
     {% endif %}
     <div class="container">
         {% if authenticated %}
-        <ul class="main-nav">
-            <li>
-                <a href="{{ url_for('main.dashboard') }}" class="nav-brand" aria-label="{{ app_metadata.name }}, главная страница">
-                    <img class="nav-brand-logo" src="{{ url_for('static', filename='images/chimera-logo-dark.png') }}" width="1937" height="453" alt="">
-                </a>
-            </li>
-            <li><a href="{{ url_for('main.dashboard') }}" class="sidebar-link{% if endpoint == 'main.dashboard' %} active{% endif %}">{{ nav_icon('home') }}<span>Главная</span></a></li>
-            <li><span class="nav-soon" title="{{ get_feature('groups').description }}"><span>Группы и {{ t.student.nom_pl|lower }}</span>{{ feature_badge('groups') }}</span></li>
-            <li><span class="nav-soon" title="{{ get_feature('documents').description }}"><span>Документы</span>{{ feature_badge('documents') }}</span></li>
-            <li><span class="nav-soon" title="{{ get_feature('assignments').description }}"><span>Поручения</span>{{ feature_badge('assignments') }}</span></li>
-            <li><span class="nav-soon" title="{{ get_feature('references').description }}"><span>Справочники</span>{{ feature_badge('references') }}</span></li>
-            {% if ctx.can(P.USERS_MANAGE) %}
-            <li>
-                <details class="nav-dropdown"{% if endpoint.startswith('admin.') %} open{% endif %}>
-                    <summary class="nav-dropdown-summary{% if endpoint.startswith('admin.') %} active{% endif %}">
-                        Администрирование
-                        <svg class="nav-dropdown-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
-                    </summary>
-                    <div class="nav-dropdown-panel">
-                        <a href="{{ url_for('admin.index') }}" {% if endpoint == 'admin.index' %}class="active"{% endif %}>Обзор</a>
-                        <a href="{{ url_for('admin.organizations') }}" {% if endpoint.startswith('admin.organization') %}class="active"{% endif %}>Организации</a>
-                        <a href="{{ url_for('admin.divisions') }}" {% if endpoint.startswith('admin.division') %}class="active"{% endif %}>{{ t.division.nom_pl }} и {{ t.department.nom_pl|lower }}</a>
-                        <a href="{{ url_for('admin.users') }}" {% if endpoint.startswith('admin.user') %}class="active"{% endif %}>Пользователи</a>
-                        <a href="{{ url_for('admin.requests') }}" {% if endpoint.startswith('admin.request') %}class="active"{% endif %}>Заявки</a>
-                        <a href="{{ url_for('admin.audit') }}" {% if endpoint == 'admin.audit' %}class="active"{% endif %}>Журнал аудита</a>
-                        {% if ctx.can_system(SP.BACKUPS_MANAGE) %}
-                        <a href="{{ url_for('admin.backups') }}" {% if endpoint.startswith('admin.backup') %}class="active"{% endif %}>Резервные копии</a>
-                        {% endif %}
-                        <a href="{{ url_for('admin.act_as') }}" {% if endpoint == 'admin.act_as' %}class="active"{% endif %}>Работать как…</a>
-                    </div>
-                </details>
-            </li>
-            {% endif %}
-            <li class="main-nav-spacer" aria-hidden="true"></li>
-            <li class="sidebar-meta"><span>{{ app_metadata.name }} {{ app_version }}</span></li>
-        </ul>
+        {% include "_navigation.html" %}
+        <div class="sidebar-backdrop" data-sidebar-backdrop hidden></div>
         <header class="app-topbar">
-            <button type="button" class="topbar-icon sidebar-toggle" aria-label="Свернуть боковую панель" title="Свернуть боковую панель" aria-expanded="true" data-sidebar-toggle>
+            <button type="button" class="topbar-icon sidebar-toggle" aria-label="Свернуть боковую панель" title="Свернуть боковую панель" aria-expanded="true" aria-controls="app-sidebar" data-sidebar-toggle>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
             </button>
-            <div class="topbar-title">{% block page_title %}{{ self.title() }}{% endblock %}</div>
-            <div class="topbar-search-slot">
+            <div class="topbar-title" title="{{ self.title() }}">{% block page_title %}{{ self.title() }}{% endblock %}</div>
+            <div class="topbar-organization">
                 {% if user_organizations|length > 1 %}
                 <form method="post" action="{{ url_for('main.switch_organization') }}" class="org-switcher">
                     {{ csrf_field() }}
-                    <label for="org-switcher" class="sr-only">Организация</label>
-                    <select id="org-switcher" name="organization_id" data-autosubmit>
+                    <label for="org-switcher" class="sr-only">Текущая организация</label>
+                    <select id="org-switcher" name="organization_id" title="{{ current_org.name }}" data-autosubmit>
                         {% for org in user_organizations %}
                         <option value="{{ org.id }}"{% if current_org and org.id == current_org.id %} selected{% endif %}>{{ org.short_name }}</option>
                         {% endfor %}
@@ -88,13 +55,13 @@
             <div class="topbar-actions">
                 {{ theme_toggle() }}
                 <details class="user-menu">
-                    <summary class="topbar-user" aria-label="Меню пользователя">
+                    <summary class="topbar-user" aria-label="Меню пользователя" aria-controls="account-links" title="{{ current_user.full_name }} · {{ role_labels[ctx.role] }}">
                         <span class="user-avatar" aria-hidden="true">{{ current_user.full_name[:1]|upper }}</span>
                         <span>{{ current_user.full_name }} · {{ role_labels[ctx.role] if ctx.role else '' }}</span>
                     </summary>
-                    <nav class="user-menu-links" aria-label="Меню пользователя">
-                        <a href="{{ url_for('auth.profile') }}">Профиль</a>
-                        <a href="{{ url_for('auth.change_password') }}">Сменить пароль</a>
+                    <nav class="user-menu-links" id="account-links" aria-label="Действия с учётной записью">
+                        <a href="{{ url_for('auth.profile') }}"{% if endpoint == 'auth.profile' %} aria-current="page"{% endif %}>Профиль</a>
+                        <a href="{{ url_for('auth.change_password') }}"{% if endpoint == 'auth.change_password' %} aria-current="page"{% endif %}>Сменить пароль</a>
                         <form method="post" action="{{ url_for('auth.logout') }}">
                             {{ csrf_field() }}
                             <button type="submit" class="btn btn-secondary">Выйти</button>
@@ -104,7 +71,7 @@
             </div>
         </header>
         {% endif %}
-        <main class="app-content" id="main-content">
+        <main class="app-content" id="main-content" tabindex="-1">
             {% if not authenticated %}<div class="auth-actions">{{ theme_toggle() }}</div>{% endif %}
             {% block flashes %}{{ flash_messages() }}{% endblock %}
             {% if authenticated %}<p class="print-only print-header">{{ current_org.name }} · {{ app_metadata.name }} · распечатано {{ now()|datetime }}</p>{% endif %}

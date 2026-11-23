@@ -43,7 +43,7 @@ def module_cards(ctx: ServiceContext, terms: Terms) -> list[ModuleCard]:
         cards.append(
             ModuleCard(
                 get_feature("administration"),
-                "Администрирование",
+                "Управление",
                 f"Реквизиты организации, {terms.division.nom_pl.lower()}, пользователи, "
                 "заявки и журнал аудита.",
                 "admin.index",
