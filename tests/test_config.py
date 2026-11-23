@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import runpy
+import secrets
 import subprocess
 import sys
 from dataclasses import replace
@@ -26,7 +27,7 @@ from chimera.web import create_app
 def config_env(tmp_path: Path) -> dict[str, str]:
     return {
         "CHIMERA_DATA_DIR": str(tmp_path / "data"),
-        "SECRET_KEY": "This-is-a-synthetic-signing-key-2026",
+        "SECRET_KEY": secrets.token_urlsafe(48),
         "DATA_ENCRYPTION_KEY": Fernet.generate_key().decode(),
     }
 
@@ -333,7 +334,7 @@ def test_incompatible_postgres_is_closed_before_any_queries(
     env = {
         **config_env,
         "DATABASE_URL": "postgresql://u:synthetic-password@127.0.0.1/db",
-        "ADMIN_DEFAULT_PASSWORD": "Synthetic-pass-42",
+        "ADMIN_DEFAULT_PASSWORD": "Synthetic-9-" + secrets.token_urlsafe(18),
     }
     monkeypatch.setattr(config, "_read_env", lambda *_: env)
     connection = MagicMock()

@@ -44,7 +44,7 @@ jobs:
 
   tests-linux:
     name: Тесты (ubuntu, SQLite + PostgreSQL 16)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -97,6 +97,10 @@ jobs:
         env:
           CHIMERA_STAGE02_TEST_POSTGRES: "1"
         run: |
+          if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-16
+          fi
           export PATH="/usr/lib/postgresql/16/bin:$PATH"
           initdb --version
           pytest --chimera-postgres
