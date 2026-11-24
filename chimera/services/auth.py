@@ -268,15 +268,44 @@ def resolve_access(session: Session, user: User, organization_id: int | None) ->
     return OrgAccess(organization, membership.role, membership.division_id)
 
 
-def ensure_initial_admin(session: Session, settings: Settings) -> User | None:
+def has_users(session: Session) -> bool:
+    return session.scalar(select(User.id).limit(1)) is not None
+
+
+INITIAL_ADMIN_CREATED = "system.initial_admin_created"
+
+
+def local_setup_needed(session: Session) -> bool:
+    if has_users(session):
+        return False
+    # Запись создаётся в той же транзакции и переживает удаление учётной записи.
+    return (
+        session.scalar(
+            select(audit.AuditLog.id).where(audit.AuditLog.action == INITIAL_ADMIN_CREATED).limit(1)
+        )
+        is None
+    )
+
+
+def ensure_initial_admin(
+    session: Session, settings: Settings, *, chosen_password: str | None = None
+) -> User | None:
     """Создаёт первую организацию и администратора, если пользователей ещё нет."""
-    if session.scalar(select(func.count(User.id))):
+    if settings.is_sqlite:
+        if not local_setup_needed(session):
+            return None
+    elif has_users(session):
         return None
-    if not settings.admin_default_password:
-        return None
-    problems = password_problems(settings.admin_default_password)
+    if chosen_password is None:
+        if not settings.admin_default_password:
+            return None
+        password = settings.admin_default_password
+    else:
+        password = chosen_password
+    problems = password_problems(password)
     if problems:
-        raise ServiceError("ADMIN_DEFAULT_PASSWORD: " + " ".join(problems))
+        prefix = "ADMIN_DEFAULT_PASSWORD: " if chosen_password is None else ""
+        raise ServiceError(prefix + " ".join(problems))
 
     organization = session.scalar(select(Organization).order_by(Organization.id))
     if organization is None:
@@ -290,15 +319,15 @@ def ensure_initial_admin(session: Session, settings: Settings) -> User | None:
     admin = User(
         username=normalize_username(settings.admin_default_username),
         full_name="Администратор",
-        password_hash=hash_password(settings.admin_default_password),
+        password_hash=hash_password(password),
         is_superadmin=True,
-        must_change_password=True,
+        must_change_password=chosen_password is None,
     )
     session.add(admin)
     session.flush()
     bind_organization(session, organization.id)
     session.add(Membership(user_id=admin.id, organization_id=organization.id, role=Role.ADMIN))
     ctx = ServiceContext.system(session, organization.id)
-    audit.record(ctx, "system.initial_admin_created", entity=admin)
+    audit.record(ctx, INITIAL_ADMIN_CREATED, entity=admin)
     session.flush()
     return admin

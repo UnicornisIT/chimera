@@ -16,6 +16,7 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy.types import TypeDecorator
 
 from chimera.core.config import POSTGRES_MAJOR, ConfigError, Settings, validate_settings
+from chimera.core.sqlite_snapshot import configure_functions
 
 # Явные имена ограничений нужны Alembic для batch-миграций SQLite.
 NAMING_CONVENTION = {
@@ -78,18 +79,15 @@ class TimestampMixin:
 def _configure_sqlite(engine: Engine, *, wal: bool) -> None:
     @event.listens_for(engine, "connect")
     def _on_connect(dbapi_connection: Any, _record: Any) -> None:
-        dbapi_connection.create_function(
-            "chimera_lower",
-            1,
-            lambda value: value.lower() if value is not None else None,
-            deterministic=True,
-        )
+        configure_functions(dbapi_connection)
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
             if wal:
                 cursor.execute("PRAGMA journal_mode=WAL")
+                if cursor.fetchone() != ("wal",):
+                    raise ConfigError("Не удалось включить режим WAL для SQLite.")
                 cursor.execute("PRAGMA synchronous=NORMAL")
         finally:
             cursor.close()

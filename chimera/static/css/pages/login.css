@@ -33,6 +33,7 @@ html[data-theme="dark"] .login-logo.logo-dark { display: block; }
 .login-subtitle { margin: 0 0 var(--space-6); text-align: center; }
 .login-field { margin-bottom: var(--space-4); }
 .login-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-5); }
+.login-actions > :only-child { grid-column: 1 / -1; }
 .login-links { margin: var(--space-4) 0 0; text-align: center; font-size: var(--font-small); }
 
 @media (max-width: 480px) {

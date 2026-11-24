@@ -274,21 +274,23 @@ def test_cli_passes_loopback_and_disables_debugger(
 ) -> None:
     env = {**config_env, "CHIMERA_MODE": "desktop-local", "APP_DEBUG": "true"}
     monkeypatch.setattr(config, "_read_env", lambda *_: env)
-    run = Mock()
-    monkeypatch.setattr("flask.Flask.run", run)
+    from werkzeug.debug import DebuggedApplication
+
+    make_server = MagicMock()
+    monkeypatch.setattr(cli, "make_server", make_server)
+    monkeypatch.setattr(cli.webbrowser, "open", lambda _address: True)
     assert cli.main(["run"]) == 0
-    run.assert_called_once_with(
-        host="127.0.0.1",
-        port=5000,
-        debug=True,
-        use_debugger=False,
-        use_reloader=False,
-        load_dotenv=False,
-    )
+    make_server.assert_called_once()
+    host, port, app = make_server.call_args.args
+    assert (host, port) == ("127.0.0.1", 5000)
+    assert make_server.call_args.kwargs == {"threaded": True}
+    assert app.debug and not isinstance(app.wsgi_app, DebuggedApplication)
+    assert make_server.return_value.daemon_threads is False
+    make_server.return_value.serve_forever.assert_called_once()
     env["APP_HOST"] = "0.0.0.0"  # noqa: S104
-    run.reset_mock()
+    make_server.reset_mock()
     assert cli.main(["run"]) == 2
-    run.assert_not_called()
+    make_server.assert_not_called()
 
 
 @pytest.mark.parametrize(

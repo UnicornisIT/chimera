@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 import os
 import re
 import secrets
 import sys
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -110,7 +112,9 @@ def _check_path(path: Path, *, name: str, directory: bool = True, writable: bool
 
 
 def _check_desktop_location(path: Path, *, name: str) -> None:
-    roots = [PROJECT_ROOT / "build", PROJECT_ROOT / "dist"]
+    roots = [PROJECT_ROOT / "build", PROJECT_ROOT / "dist", PROJECT_ROOT / "chimera"]
+    if not (PROJECT_ROOT / "pyproject.toml").is_file():
+        roots.append(PROJECT_ROOT)
     bundle = getattr(sys, "_MEIPASS", None)
     if bundle:
         roots.append(Path(bundle))
@@ -376,9 +380,17 @@ def _read_local_key(path: Path) -> str | None:
 def _create_local_key(path: Path, value: str) -> str:
     try:
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w", encoding="ascii") as stream:
-            stream.write(value)
+        with tempfile.TemporaryDirectory(dir=path.parent) as directory:
+            pending = Path(directory) / path.name
+            fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="ascii") as stream:
+                stream.write(value)
+                stream.flush()
+                os.fsync(stream.fileno())
+            if os.name == "nt":
+                pending.rename(path)
+            else:
+                os.link(pending, path)
     except FileExistsError:
         return _read_local_key(path) or ""
     except OSError:
@@ -467,6 +479,23 @@ def load_settings(
     if not local_keys:
         return settings
 
+    return load_local_keys(settings)
+
+
+def load_local_keys(settings: Settings) -> Settings:
+    options_path = settings.data_dir / "profile-settings.json"
+    try:
+        options = json.loads(options_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        options = {}
+    except (OSError, ValueError):
+        raise ConfigError("Не удалось прочитать настройки локального профиля.") from None
+    if not isinstance(options, dict) or not isinstance(
+        options.get("blind_index_key"), (str, type(None))
+    ):
+        raise ConfigError("Настройки локального профиля повреждены.")
+    if settings.blind_index_key is None:
+        settings = replace(settings, blind_index_key=options.get("blind_index_key"))
     secret_path = settings.data_dir / "secret_key"
     encryption_path = settings.data_dir / "data_encryption.key"
     secret = settings.secret_key or _read_local_key(secret_path)

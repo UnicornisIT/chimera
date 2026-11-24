@@ -69,6 +69,67 @@ threading.Thread(target=probe, daemon=True).start()
 sys.argv = ["chimera", "run"]
 runpy.run_module("chimera", run_name="__main__")
 """
+
+LOCAL_FIRST_RUN = """
+import http.cookiejar
+import os
+import re
+import runpy
+import secrets
+import sys
+import threading
+import webbrowser
+from urllib.parse import urlencode, urlsplit
+from urllib.request import HTTPCookieProcessor, ProxyHandler, Request, build_opener
+
+ready = threading.Event()
+launch_url = []
+
+def open_setup(url):
+    launch_url.append(url)
+    ready.set()
+    return True
+
+def probe():
+    try:
+        if not ready.wait(45):
+            raise TimeoutError("Ожидание запуска")
+        address = urlsplit(launch_url[0])
+        origin = f"{address.scheme}://{address.netloc}"
+        setup = origin + address.path
+        opener = build_opener(ProxyHandler({}), HTTPCookieProcessor(http.cookiejar.CookieJar()))
+
+        def token(url):
+            with opener.open(url, timeout=10) as response:
+                return re.search(rb'name="csrf_token" value="([^"]+)"', response.read())[1].decode()
+
+        password = "Wheel-9-" + secrets.token_urlsafe(18)
+        body = urlencode({
+            "setup_token": address.fragment,
+            "csrf_token": token(setup),
+            "password": password,
+            "password_confirm": password,
+        }).encode()
+        with opener.open(Request(setup, body, {"Origin": origin}), timeout=10) as response:
+            assert response.url == origin + "/login"
+        body = urlencode({
+            "username": os.environ["ADMIN_DEFAULT_USERNAME"],
+            "csrf_token": token(origin + "/login"),
+            "password": password,
+        }).encode()
+        with opener.open(origin + "/login", body, timeout=10) as response:
+            assert response.url == origin + "/"
+        print("PASS Desktop Local: первый запуск, настройка и вход по HTTP", flush=True)
+    except Exception as error:
+        print(f"FAIL Desktop Local: настройка или авторизация ({type(error).__name__})", flush=True)
+        os._exit(1)
+    os._exit(0)
+
+webbrowser.open = open_setup
+threading.Thread(target=probe, daemon=True).start()
+sys.argv = ["chimera", "run"]
+runpy.run_module("chimera", run_name="__main__")
+"""
 WSGI_RUN = """
 from chimera.wsgi import app
 response = app.test_client().get("/login", base_url="https://chimera.example")
@@ -244,6 +305,11 @@ def verify_sqlite(python: list[str], cwd: Path, env: dict[str, str], head: str) 
             [*python, "-c", LOCAL_RUN], cwd=cwd, env={**env, "APP_PORT": str(port)}, timeout=45
         ).strip()
     )
+    first_run_env = {**env, "APP_PORT": str(port), "CHIMERA_DATA_DIR": str(cwd / "first-run")}
+    first_run_env.pop("ADMIN_DEFAULT_PASSWORD")
+    print(run([*python, "-c", LOCAL_FIRST_RUN], cwd=cwd, env=first_run_env, timeout=90).strip())
+    with closing(sqlite3.connect(cwd / "first-run" / "chimera.db")) as conn:
+        assert conn.execute("SELECT username FROM users").fetchall() == [("wheeladmin",)]
 
     future = cwd / "future.db"
     with closing(sqlite3.connect(database)) as source, closing(sqlite3.connect(future)) as target:

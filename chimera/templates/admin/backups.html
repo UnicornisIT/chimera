@@ -12,6 +12,9 @@
 {% if pg_dump_missing %}
 <div class="flash-message error" role="alert">Программа <code>{{ pg_dump_path }}</code> не найдена. Установите клиент PostgreSQL (пакет <code>postgresql-client</code>) той же основной версии, что и сервер, или укажите полный путь в переменной <code>PG_DUMP_PATH</code>.</div>
 {% endif %}
+{% if dialect == 'sqlite' %}
+<p>Копия из этого раздела содержит только базу. Для восстановления всего профиля сохраните также вложения и исходные ключи.</p>
+{% endif %}
 <section class="panel">
     <h2>Состояние базы</h2>
     <p>СУБД: <strong>{{ 'PostgreSQL' if dialect == 'postgresql' else 'SQLite' }}</strong> ·

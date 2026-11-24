@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import csrf_field, login_wordmark with context %}
+{% block title %}Первоначальная настройка{% endblock %}
+{% block flashes %}{% endblock %}
+{% block content %}
+<div class="login-page">
+    <form method="post" class="login-card" id="local-setup">
+        {{ login_wordmark(app_metadata.name) }}
+        <h1 class="login-subtitle">Создание администратора</h1>
+        <p>Логин для входа: <strong>{{ username }}</strong></p>
+        {{ csrf_field() }}
+        <input type="hidden" name="setup_token" value="{{ setup_token }}">
+        <div class="login-field form-field">
+            <label for="password">Пароль</label>
+            <input type="password" id="password" name="password" required
+                   autocomplete="new-password" minlength="{{ password_min_length }}" autofocus
+                   {% if error %}data-error-focus{% endif %}>
+        </div>
+        <div class="login-field form-field">
+            <label for="password_confirm">Повторите пароль</label>
+            <input type="password" id="password_confirm" name="password_confirm" required
+                   autocomplete="new-password" minlength="{{ password_min_length }}">
+        </div>
+        {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+        {% if not setup_token %}
+        <p id="setup-access" role="status">Чтобы настроить профиль, откройте окно из Chimera.</p>
+        {% endif %}
+        <div class="login-actions">
+            <button type="submit" class="btn"{% if not setup_token %} disabled{% endif %}>Создать администратора</button>
+        </div>
+    </form>
+</div>
+<script src="{{ url_for('static', filename='js/local-setup.js') }}" defer></script>
+{% endblock %}

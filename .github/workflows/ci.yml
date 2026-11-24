@@ -76,6 +76,7 @@ jobs:
       - name: Миграции на чистой SQLite и проверка моделей
         env:
           CHIMERA_MODE: desktop-local
+          CHIMERA_DATA_DIR: ${{ runner.temp }}/migration-profile
           DATABASE_URL: sqlite:///${{ runner.temp }}/migrations-check.db
         run: |
           alembic upgrade head
@@ -129,6 +130,7 @@ jobs:
         shell: bash
         env:
           CHIMERA_MODE: desktop-local
+          CHIMERA_DATA_DIR: ${{ runner.temp }}/migration-profile
           DATABASE_URL: sqlite:///${{ runner.temp }}/migrations-check.db
         run: |
           alembic upgrade head
@@ -142,6 +144,13 @@ jobs:
           python -m pip install build
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -m scripts.check_installed_migrations
+      - name: Edge smoke (этап 07)
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          python -m pip install playwright==1.65.2
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -c "import os; from pathlib import Path; from tests.browser import stage07_smoke as smoke; smoke.SCREENS = Path(os.environ['RUNNER_TEMP']) / 'stage07'; smoke.main()"
 
   docker:
     name: Docker-образ (сборка и запуск)

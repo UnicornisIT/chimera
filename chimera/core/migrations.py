@@ -37,7 +37,10 @@ def alembic_config(database_url: str, *, migrations_dir: Path = MIGRATIONS_DIR) 
 
 def upgrade_head(database: Database) -> None:
     config = alembic_config(database.url)
-    with database.engine.connect() as connection:
+    with database.engine.begin() as connection:
+        if database.dialect == "sqlite":
+            # Драйвер SQLite не начинает транзакцию автоматически при DDL.
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
         config.attributes["connection"] = connection
         command.upgrade(config, "head")
 
@@ -71,7 +74,8 @@ def schema_state(engine: Engine, database_url: str) -> SchemaState:
         check_unversioned_schema(connection, current)
     if current is not None:
         try:
-            known = script.get_revision(current) is not None
+            revision = script.get_revision(current)
+            known = revision is not None and revision.revision == current
         except (ResolutionError, CommandError):
             known = False
         if not known:

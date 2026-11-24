@@ -70,14 +70,13 @@ For Desktop Local from source:
 ```bash
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
-cp .env.example .env   # set CHIMERA_MODE=desktop-local and leave DATABASE_URL empty
-.venv/bin/python -m chimera migrate
-.venv/bin/python -m chimera run
+CHIMERA_MODE=desktop-local .venv/bin/python -m chimera run
 ```
 
 Desktop Local uses SQLite and serves HTTP on `127.0.0.1`. A new Windows profile
 uses `%LOCALAPPDATA%/Chimera`. Set `CHIMERA_DATA_DIR` to keep using an existing
-profile. Changing modes does not transfer or sync data.
+profile. On first launch, set the administrator password in the browser window
+opened by Chimera.
 
 The documentation in [`docs/`](docs/) is written in Russian.
 
