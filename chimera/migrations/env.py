@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from logging.config import fileConfig
 from typing import Any, Literal
 
@@ -15,6 +16,7 @@ import chimera.models  # noqa: F401 - регистрирует все табли
 from chimera.core.config import AppMode, ConfigError, load_settings, validate_settings
 from chimera.core.crypto import EncryptedString
 from chimera.core.db import Base, Database, UTCDateTime
+from chimera.core.local_profile import own_local_profile
 from chimera.core.migrations import check_unversioned_schema
 
 config = context.config
@@ -63,12 +65,13 @@ def run_migrations_online() -> None:
     settings = load_settings(require_secrets=False)
     if settings.mode is AppMode.SERVER:
         settings = validate_settings(settings)
-    database = Database.from_settings(settings)
-    try:
-        with database.engine.connect() as conn:
-            _run(conn)
-    finally:
-        database.dispose()
+    with own_local_profile(settings) if settings.is_sqlite else nullcontext():
+        database = Database.from_settings(settings)
+        try:
+            with database.engine.connect() as conn:
+                _run(conn)
+        finally:
+            database.dispose()
 
 
 def _run(connection: Connection) -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import shutil
 import sqlite3
@@ -11,6 +12,7 @@ import stat
 from collections.abc import Iterator
 from contextlib import closing, contextmanager, suppress
 from pathlib import Path
+from time import monotonic
 from uuid import uuid4
 
 from alembic.script import ScriptDirectory
@@ -25,6 +27,7 @@ from chimera.core.sqlite_snapshot import check_integrity, open_readonly, snapsho
 
 MANIFEST = "manifest.json"
 PROFILE_FILES = {"chimera.db", "secret_key", "data_encryption.key", "profile-settings.json"}
+log = logging.getLogger(__name__)
 
 
 def _safe_path(path: Path) -> Path:
@@ -140,6 +143,8 @@ def _write_private(path: Path, value: str) -> None:
 
 
 def copy_profile(settings: Settings) -> Path:
+    started = monotonic()
+    phase = "prepare"
     try:
         source = _safe_path(sqlite_path(settings))
         uploads = _safe_path(settings.upload_dir)
@@ -149,8 +154,10 @@ def copy_profile(settings: Settings) -> Path:
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         parent_identity = _directory_chain(directory)
         with _private_stage(directory, parent_identity) as (stage, stage_identity):
+            phase = "sqlite"
             snapshot(source, stage / "chimera.db")
             revision = _revision(stage / "chimera.db", settings)
+            phase = "files"
             _write_private(stage / "secret_key", settings.secret_key)
             _write_private(stage / "data_encryption.key", settings.data_encryption_key)
             _write_private(
@@ -165,7 +172,9 @@ def copy_profile(settings: Settings) -> Path:
                 "files": {name: _digest(path) for name, path in _files(stage).items()},
             }
             _write_private(stage / MANIFEST, json.dumps(manifest, sort_keys=True))
+            phase = "verify"
             _verified_profile(stage, settings)
+            phase = "publish"
             target = directory / f"profile-{uuid4().hex}"
             if (
                 _directory_chain(directory) != parent_identity
@@ -174,7 +183,19 @@ def copy_profile(settings: Settings) -> Path:
                 raise ConfigError("Каталог копии изменился. Повторите операцию в личном каталоге.")
             stage.rename(target)
             return target
-    except (OSError, sqlite3.Error, RecursionError):
+    except (ConfigError, OSError, sqlite3.Error, RecursionError) as exc:
+        code = getattr(exc, "sqlite_errorcode", None)
+        log.warning(
+            "Сбой полной копии профиля: phase=%s elapsed_ms=%d sqlite_code=%s "
+            "sqlite_busy=%s os_code=%s",
+            phase,
+            (monotonic() - started) * 1000,
+            code,
+            code is not None and code & 0xFF in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED},
+            getattr(exc, "winerror", None) or getattr(exc, "errno", None),
+        )
+        if isinstance(exc, ConfigError):
+            raise
         raise ConfigError(
             "Не удалось создать полную копию. Проверьте профиль, доступ и место."
         ) from None

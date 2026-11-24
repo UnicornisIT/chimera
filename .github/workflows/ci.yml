@@ -76,6 +76,7 @@ jobs:
       - name: Миграции на чистой SQLite и проверка моделей
         env:
           CHIMERA_MODE: desktop-local
+          CHIMERA_DATA_DIR: ${{ runner.temp }}/migration-profile
           DATABASE_URL: sqlite:///${{ runner.temp }}/migrations-check.db
         run: |
           alembic upgrade head
@@ -129,6 +130,7 @@ jobs:
         shell: bash
         env:
           CHIMERA_MODE: desktop-local
+          CHIMERA_DATA_DIR: ${{ runner.temp }}/migration-profile
           DATABASE_URL: sqlite:///${{ runner.temp }}/migrations-check.db
         run: |
           alembic upgrade head

@@ -23,11 +23,17 @@ from alembic.config import Config
 from alembic.util.exc import CommandError
 from sqlalchemy import delete, func, select
 
+from chimera import __main__ as cli
 from chimera.core.audit import AuditLog
 from chimera.core.config import ConfigError, Settings, load_local_keys, load_settings
 from chimera.core.crypto import get_cipher
 from chimera.core.db import Database
-from chimera.core.local_profile import PROFILE_MARKER, own_local_profile, sqlite_path
+from chimera.core.local_profile import (
+    INITIALIZING_MARKER,
+    PROFILE_MARKER,
+    own_local_profile,
+    sqlite_path,
+)
 from chimera.core.migrations import SchemaState, SchemaTooNewError, upgrade_head
 from chimera.core.sqlite_snapshot import open_readonly, snapshot
 from chimera.models import Organization, User
@@ -412,6 +418,141 @@ def test_missing_database_after_initialization_is_not_recreated(tmp_path: Path) 
     with pytest.raises(ConfigError, match="отсутствует"), own_local_profile(settings):
         pytest.fail("missing database")
     assert not sqlite_path(settings).exists()
+
+
+@pytest.mark.parametrize("action", ("run", "migrate"))
+def test_legacy_profile_with_backup_refuses_to_recreate_database(
+    action: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = profile_env(tmp_path)
+    settings = load_settings(env)
+    database = Database.from_settings(settings)
+    settings.upload_dir.mkdir()
+    settings.backup_dir.mkdir()
+    backup = settings.backup_dir / "chimera-20261124-120000.sqlite3"
+    try:
+        upgrade_head(database)
+        with database.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.exec_driver_sql("VACUUM INTO ?", (str(backup),))
+    finally:
+        database.dispose()
+    assert not (tmp_path / PROFILE_MARKER).exists()
+    sqlite_path(settings).rename(tmp_path / "moved.db")
+    originals = {
+        path: path.read_bytes()
+        for path in (backup, tmp_path / "secret_key", tmp_path / "data_encryption.key")
+    }
+    monkeypatch.setattr("chimera.core.config._read_env", lambda *_: env)
+    monkeypatch.setattr(cli, "make_server", lambda *_a, **_kw: pytest.fail("setup was started"))
+    assert cli.main([action]) == 2
+    assert "восстановите копию в отдельный каталог" in capsys.readouterr().err
+    assert not sqlite_path(settings).exists()
+    assert not (tmp_path / PROFILE_MARKER).exists()
+    assert {path: path.read_bytes() for path in originals} == originals
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    (
+        "backups/profile-synthetic/manifest.json",
+        "uploads/document.txt",
+        "profile-settings.json",
+        "chimera.db-wal",
+        "chimera.db-shm",
+        "chimera.db-journal",
+    ),
+)
+def test_missing_database_with_evidence_refuses_initialization(
+    tmp_path: Path, evidence: str
+) -> None:
+    witness = tmp_path / evidence
+    witness.parent.mkdir(parents=True, exist_ok=True)
+    witness.touch()
+    settings = load_settings(
+        {
+            **profile_env(tmp_path),
+            "CHIMERA_BACKUP_DIR": str(tmp_path / "new-backups"),
+            "CHIMERA_UPLOAD_DIR": str(tmp_path / "new-uploads"),
+        },
+        require_secrets=False,
+    )
+    with pytest.raises(ConfigError, match="отсутствует"), own_local_profile(settings):
+        pytest.fail("profile was recreated")
+    assert witness.exists()
+    assert not sqlite_path(settings).exists()
+
+
+@pytest.mark.parametrize("interrupted", (False, True))
+def test_new_and_interrupted_profiles_allow_initialization(
+    tmp_path: Path, interrupted: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "profile"
+    env = profile_env(root)
+    if interrupted:
+        pending = load_settings(env, require_secrets=False)
+        with own_local_profile(pending):
+            load_local_keys(pending)
+        assert (root / INITIALIZING_MARKER).is_file()
+        (root / "uploads").mkdir()
+        (root / "backups").mkdir()
+    before = {p.name: p.read_bytes() for p in root.glob("*key")}
+    monkeypatch.setattr("chimera.core.config._read_env", lambda *_: env)
+    assert cli.main(["migrate"]) == 0
+    assert (root / "chimera.db").is_file()
+    assert (root / PROFILE_MARKER).is_file()
+    assert not (root / INITIALIZING_MARKER).exists()
+    assert {name: (root / name).read_bytes() for name in before} == before
+
+
+def test_unmarked_key_only_profile_requires_explicit_choice(tmp_path: Path) -> None:
+    settings = load_settings(profile_env(tmp_path))
+    keys = {p.name: p.read_bytes() for p in tmp_path.glob("*key")}
+    with pytest.raises(ConfigError, match="состояние не определено"), own_local_profile(settings):
+        pytest.fail("ambiguous profile was accepted")
+    assert not sqlite_path(settings).exists()
+    assert not (tmp_path / INITIALIZING_MARKER).exists()
+    assert {name: (tmp_path / name).read_bytes() for name in keys} == keys
+
+
+def test_standalone_alembic_respects_active_profile_lock(tmp_path: Path) -> None:
+    settings = load_settings(profile_env(tmp_path))
+    create_app(settings).extensions["chimera.db"].dispose()
+
+    def upgrade() -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            env=_child_env(tmp_path),
+            capture_output=True,
+            timeout=PROCESS_TIMEOUT,
+            check=False,
+        )
+
+    with own_local_profile(settings):
+        result = upgrade()
+        assert result.returncode != 0
+        assert "другим процессом".encode() in result.stdout + result.stderr
+    assert upgrade().returncode == 0
+
+
+def test_backup_failure_logs_sanitized_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    settings = load_settings(profile_env(tmp_path))
+    create_app(settings).extensions["chimera.db"].dispose()
+    sensitive = "synthetic path, key or database contents"
+
+    def unavailable(_source: Path, _target: Path) -> None:
+        error = sqlite3.OperationalError(sensitive)
+        error.sqlite_errorcode = sqlite3.SQLITE_BUSY
+        raise error
+
+    monkeypatch.setattr(local_backup, "snapshot", unavailable)
+    with own_local_profile(settings), pytest.raises(ConfigError):
+        copy_profile(settings)
+    assert "phase=sqlite elapsed_ms=" in caplog.text
+    assert "sqlite_code=5 sqlite_busy=True" in caplog.text
+    assert sensitive not in caplog.text
+    assert not list(settings.backup_dir.iterdir())
 
 
 def test_profile_lock_rejects_hardlinked_database_alias(tmp_path: Path) -> None:

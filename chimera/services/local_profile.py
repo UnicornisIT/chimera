@@ -9,7 +9,7 @@ from sqlalchemy.exc import DBAPIError
 
 from chimera.core.config import ConfigError, Settings
 from chimera.core.db import Database
-from chimera.core.local_profile import PROFILE_MARKER, sqlite_path
+from chimera.core.local_profile import INITIALIZING_MARKER, PROFILE_MARKER, sqlite_path
 from chimera.core.migrations import schema_state, upgrade_head
 from chimera.core.sqlite_snapshot import check_integrity, open_readonly, sqlite_error_message
 from chimera.services.local_backup import copy_profile
@@ -37,6 +37,7 @@ def prepare_local_schema(database: Database, settings: Settings) -> None:
                 pass
         except FileExistsError:
             pass
+        (settings.data_dir / INITIALIZING_MARKER).unlink(missing_ok=True)
     except (sqlite3.Error, DBAPIError) as exc:
         error = exc.orig if isinstance(exc, DBAPIError) else exc
         raise ConfigError(

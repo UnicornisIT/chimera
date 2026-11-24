@@ -11,7 +11,7 @@ from threading import Thread
 from playwright.sync_api import expect, sync_playwright
 from werkzeug.serving import make_server
 
-from chimera.core.config import LOOPBACK, load_settings
+from chimera.core.config import LOOPBACK, load_local_keys, load_settings
 from chimera.core.local_profile import own_local_profile
 from chimera.web import create_app
 
@@ -24,12 +24,13 @@ def main() -> None:
         port = probe.getsockname()[1]
         probe.close()
         settings = load_settings(
-            {"CHIMERA_MODE": "desktop-local", "CHIMERA_DATA_DIR": temporary, "APP_PORT": str(port)}
+            {"CHIMERA_MODE": "desktop-local", "CHIMERA_DATA_DIR": temporary, "APP_PORT": str(port)},
+            require_secrets=False,
         )
         token = secrets.token_urlsafe(32)
         origin = f"http://{LOOPBACK}:{port}"
         with own_local_profile(settings):
-            app = create_app(settings, setup_token=token)
+            app = create_app(load_local_keys(settings), setup_token=token)
             with make_server(LOOPBACK, port, app) as server:
                 worker = Thread(target=server.serve_forever)
                 worker.start()
