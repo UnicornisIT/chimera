@@ -75,12 +75,12 @@ docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
 ```bash
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
-cp .env.example .env    # установите CHIMERA_MODE=desktop-local, оставьте DATABASE_URL пустым
-.venv/bin/python -m chimera migrate
-.venv/bin/python -m chimera run
+CHIMERA_MODE=desktop-local .venv/bin/python -m chimera run
 ```
 
-На Windows используйте `py -3.11 -m venv .venv` и `.venv\Scripts\python.exe`.
+На Windows используйте `py -3.11 -m venv .venv`, задайте
+`$env:CHIMERA_MODE = 'desktop-local'` и запустите `.venv\Scripts\python.exe -m chimera run`.
+При первом запуске задайте пароль администратора в открывшемся окне браузера.
 Подробности — в [инструкции по установке](docs/installation.md).
 
 ## Документация

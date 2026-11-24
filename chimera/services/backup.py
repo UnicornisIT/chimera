@@ -10,20 +10,22 @@ import contextlib
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from psycopg import pq
-from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
 from chimera.core import audit
-from chimera.core.config import Settings
+from chimera.core.config import ConfigError, Settings
 from chimera.core.context import NotFound, ServiceContext, ServiceError
 from chimera.core.db import Database, utcnow
 from chimera.core.permissions import SystemPermission
+from chimera.core.sqlite_snapshot import snapshot, sqlite_error_message
 
 PG_DUMP_TIMEOUT_SECONDS = 1800
 _NAME = re.compile(r"^chimera-\d{8}-\d{6}(?:-\d+)?\.(?:sqlite3|dump)$")
@@ -58,20 +60,28 @@ def _target(directory: Path, suffix: str) -> Path:
 
 
 def _sqlite_backup(database: Database, directory: Path) -> Path:
-    target = _target(directory, "sqlite3")
-    with database.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        conn.execute(text("VACUUM INTO :path"), {"path": str(target)})
-    check = create_engine(f"sqlite:///{target.as_posix()}")
     try:
-        with check.connect() as conn:
-            result = conn.execute(text("PRAGMA integrity_check")).scalar()
-    finally:
-        check.dispose()
-    if result != "ok":
-        target.unlink(missing_ok=True)
-        raise BackupError(f"Копия не прошла проверку целостности: {result}")
-    _restrict(target)
-    return target
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=directory) as temporary:
+            pending = Path(temporary) / "backup.sqlite3"
+            snapshot(Path(make_url(database.url).database or ""), pending)
+            _restrict(pending)
+            while True:
+                target = _target(directory, "sqlite3")
+                try:
+                    if os.name == "nt":
+                        pending.rename(target)
+                    else:
+                        os.link(pending, target)
+                except FileExistsError:
+                    continue
+                return target
+    except ConfigError as exc:
+        raise BackupError(str(exc)) from None
+    except sqlite3.Error as exc:
+        raise BackupError(sqlite_error_message(exc, "Не удалось сохранить копию SQLite.")) from None
+    except OSError:
+        raise BackupError("Не удалось сохранить копию SQLite. Проверьте доступ и место.") from None
 
 
 def find_pg_dump(configured: str) -> str | None:

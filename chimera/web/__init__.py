@@ -8,13 +8,20 @@ from pathlib import Path
 from typing import Any
 
 from alembic.util.exc import CommandError
-from flask import Flask, Response, abort, g, render_template, request, session
-from sqlalchemy.exc import SQLAlchemyError
+from flask import Flask, Response, abort, g, redirect, render_template, request, session, url_for
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from chimera.core import crypto
-from chimera.core.config import AppMode, ConfigError, Settings, load_settings, validate_settings
+from chimera.core.config import (
+    LOOPBACK,
+    AppMode,
+    ConfigError,
+    Settings,
+    load_settings,
+    validate_settings,
+)
 from chimera.core.context import NotFound, PermissionDenied, ServiceError
 from chimera.core.db import Database, utcnow
 from chimera.core.features import FEATURES, FeatureStatus, get_feature
@@ -29,15 +36,18 @@ from chimera.core.security import (
     csrf_valid,
     security_headers,
 )
+from chimera.core.sqlite_snapshot import sqlite_error_message
 from chimera.services import auth as auth_service
 from chimera.services import impersonation
+from chimera.services.local_profile import prepare_local_schema
 from chimera.web import context as web_context
+from chimera.web.local_setup import SETUP_PENDING, register_setup
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 log = logging.getLogger(__name__)
 
 
-def create_app(settings: Settings | None = None) -> Flask:
+def create_app(settings: Settings | None = None, *, setup_token: str | None = None) -> Flask:
     settings = load_settings() if settings is None else validate_settings(settings)
     app = Flask(
         "chimera",
@@ -65,6 +75,8 @@ def create_app(settings: Settings | None = None) -> Flask:
         _prepare_schema(database, settings)
         crypto.configure(settings.data_encryption_key, settings.blind_index_key)
         _bootstrap(database, settings)
+        if setup_token and settings.mode is AppMode.DESKTOP_LOCAL:
+            register_setup(app, database, settings, setup_token)
     except (ConfigError, SchemaTooNewError, ServiceError) as exc:
         database.dispose()
         raise ConfigError(str(exc)) from None
@@ -89,10 +101,13 @@ def create_app(settings: Settings | None = None) -> Flask:
 
 
 def _prepare_schema(database: Database, settings: Settings) -> None:
+    if settings.mode is AppMode.DESKTOP_LOCAL:
+        prepare_local_schema(database, settings)
+        return
     state = schema_state(database.engine, database.url)
     if state.up_to_date:
         return
-    if settings.mode is AppMode.DESKTOP_LOCAL or settings.testing:
+    if settings.testing:
         log.info("Обновление схемы базы %s → %s", state.current, state.head)
         upgrade_head(database)
         return
@@ -114,8 +129,19 @@ def _bootstrap(database: Database, settings: Settings) -> None:
 def _register_request_hooks(app: Flask, settings: Settings) -> None:
     @app.before_request
     def _before() -> Any:
+        if (
+            settings.mode is AppMode.DESKTOP_LOCAL
+            and not settings.testing
+            and (
+                request.host.split(":", 1)[0] not in {LOOPBACK, "localhost"}
+                or request.remote_addr != LOOPBACK
+            )
+        ):
+            return Response("Локальный профиль доступен только на этом компьютере.", 400)
         if request.endpoint == "static":
             return None
+        if app.extensions.get(SETUP_PENDING) and request.endpoint not in {None, "local_setup"}:
+            return redirect(url_for("local_setup"))
         if request.method not in SAFE_METHODS:
             submitted = request.form.get(CSRF_FORM_FIELD) or request.headers.get(CSRF_HEADER)
             if not csrf_valid(session, submitted):
@@ -127,8 +153,6 @@ def _register_request_hooks(app: Flask, settings: Settings) -> None:
             and state.user.must_change_password
             and request.endpoint not in web_context.PASSWORD_CHANGE_ALLOWED
         ):
-            from flask import redirect, url_for
-
             return redirect(url_for("auth.change_password"))
         return None
 
@@ -205,6 +229,16 @@ def _register_template_helpers(app: Flask) -> None:
 def _register_error_handlers(app: Flask) -> None:
     def _render(code: int, title: str, message: str) -> tuple[str, int]:
         return render_template("error.html", code=code, title=title, message=message), code
+
+    if app.extensions["chimera.settings"].mode is AppMode.DESKTOP_LOCAL:
+
+        @app.errorhandler(OperationalError)
+        def _sqlite_unavailable(exc: OperationalError) -> tuple[str, int]:
+            return _render(
+                503,
+                "База временно недоступна",
+                sqlite_error_message(exc.orig, "Не удалось выполнить операцию в SQLite."),
+            )
 
     @app.errorhandler(PermissionDenied)
     def _denied(_exc: PermissionDenied) -> tuple[str, int]:

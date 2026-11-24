@@ -142,6 +142,13 @@ jobs:
           python -m pip install build
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -m scripts.check_installed_migrations
+      - name: Edge smoke (этап 07)
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          python -m pip install playwright==1.65.2
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -c "import os; from pathlib import Path; from tests.browser import stage07_smoke as smoke; smoke.SCREENS = Path(os.environ['RUNNER_TEMP']) / 'stage07'; smoke.main()"
 
   docker:
     name: Docker-образ (сборка и запуск)
